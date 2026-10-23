@@ -117,6 +117,7 @@ export const api = {
   },
   strategyPresets: () => get('/api/strategy/presets'),
   strategyPresetsSave: (presets) => post('/api/strategy/presets', { presets }),
+  strategyPresetsUpcoming: (presets) => post('/api/strategy/presets/upcoming', { presets }),
   settingsAi: () => get('/api/settings/ai'),
   settingsAiSave: (body) => post('/api/settings/ai', body),
   settingsAiClear: () => del('/api/settings/ai/key'),

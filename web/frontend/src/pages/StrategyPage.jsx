@@ -436,6 +436,7 @@ export default function StrategyPage() {
   const [presetUpcomingMap, setPresetUpcomingMap] = useState({})
   const [presetUpcomingLoading, setPresetUpcomingLoading] = useState(false)
   const [presetUpcomingOpen, setPresetUpcomingOpen] = useState(false)
+  const [presetUpcomingGames, setPresetUpcomingGames] = useState([])
 
   useEffect(() => {
     const prev = loadStrategyResults()
@@ -575,34 +576,26 @@ export default function StrategyPage() {
     setPresetUpcomingOpen(true)
     setError('')
     setPresetMsg(`Prüfe Upcoming für ${list.length} Strategien…`)
-    Promise.all(
-      list.map((p) =>
-        api
-          .strategyUpcoming({ ...DEFAULTS, ...p.filters }, 200)
-          .then((res) => ({
-            id: p.id,
-            name: p.name,
-            n: res?.skipped ? 0 : Number(res?.n) || 0,
-            skipped: !!res?.skipped,
-            message: res?.message || null,
-            ok: !!res?.ok,
-            error: null,
-          }))
-          .catch((e) => ({
-            id: p.id,
-            name: p.name,
-            n: 0,
-            skipped: false,
-            message: null,
-            ok: false,
-            error: String(e.message || e),
-          })),
-      ),
-    )
-      .then((rows) => {
+    api
+      .strategyPresetsUpcoming(
+        list.map((p) => ({ id: p.id, name: p.name, filters: { ...DEFAULTS, ...p.filters } })),
+      )
+      .then((res) => {
+        const rows = (res?.strategies || []).map((s) => ({
+          id: s.id,
+          name: s.name,
+          n: s.skipped ? 0 : Number(s.n_upcoming) || 0,
+          skipped: !!s.skipped,
+          message: s.message || null,
+          ok: !!s.ok,
+          error: s.error || null,
+          losingStreak: s.losing_streak,
+          winningStreak: s.winning_streak,
+        }))
         const map = {}
         for (const r of rows) map[r.id] = r
         setPresetUpcomingMap(map)
+        setPresetUpcomingGames(res?.matches || [])
         const withHits = rows.filter((r) => r.n > 0).length
         setPresetMsg(
           withHits > 0
@@ -610,6 +603,7 @@ export default function StrategyPage() {
             : `Keine bevorstehenden Treffer in ${rows.length} Strategien.`,
         )
       })
+      .catch((e) => setError(String(e.message || e)))
       .finally(() => setPresetUpcomingLoading(false))
   }
 
@@ -911,6 +905,57 @@ export default function StrategyPage() {
               </table>
             </div>
           )}
+          {presetUpcomingGames.length ? (
+            <>
+              <div className="strat-preset-upcoming-head" style={{ marginTop: '0.9rem' }}>
+                <strong>Alle bevorstehenden Spiele ({presetUpcomingGames.length})</strong>
+              </div>
+              <p className="muted" style={{ margin: '0 0 0.5rem' }}>
+                Nach Anstoß sortiert. Serie = aktuelle Serie der Strategie in der Vergangenheit:
+                <strong> −</strong> verlorene Wetten in Folge, <strong>+</strong> gewonnene in Folge
+                (Unentschieden zählt bei Home/Away als verloren).
+              </p>
+              <div className="table-wrap strat-preset-upcoming-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Datum</th>
+                      <th>Land</th>
+                      <th>Liga</th>
+                      <th>Heim</th>
+                      <th>Gast</th>
+                      <th>Markt</th>
+                      <th className="num">Quote</th>
+                      <th>Strategie</th>
+                      <th className="num" title="Verlorene Wetten in Folge (aktuell)">Serie −</th>
+                      <th className="num" title="Gewonnene Wetten in Folge (aktuell)">Serie +</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {presetUpcomingGames.map((g, i) => (
+                      <tr
+                        key={`pug-${g.game_id}-${g.market}-${g.strategy_id}-${i}`}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => openPresetFromUpcomingScan(g.strategy_id)}
+                        title="Klick → Strategie laden"
+                      >
+                        <td>{String(g.date || '').slice(0, 16).replace('T', ' ')}</td>
+                        <td>{g.country || '—'}</td>
+                        <td>{g.league || '—'}</td>
+                        <td>{g.home}</td>
+                        <td>{g.away}</td>
+                        <td>{g.market}</td>
+                        <td className="num">{oddsNum(g.odds)}</td>
+                        <td>{g.strategy}</td>
+                        <td className={`num ${g.losing_streak > 0 ? 'neg' : ''}`}>{num(g.losing_streak, 0)}</td>
+                        <td className={`num ${g.winning_streak > 0 ? 'pos' : ''}`}>{num(g.winning_streak, 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
         </section>
       ) : null}
 

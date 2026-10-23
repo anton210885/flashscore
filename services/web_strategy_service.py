@@ -1075,3 +1075,77 @@ def find_upcoming(filters: Dict[str, Any], *, limit: int = 200) -> Dict[str, Any
         "matches": matches[:lim],
         "truncated": len(matches) > lim,
     }
+
+
+def presets_upcoming(presets: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Bevorstehende Spiele aller gespeicherten Strategien in einer Liste (Datum aufsteigend).
+
+    Pro Strategie die aktuelle Serie aus der Historie: Niederlagen bzw. Siege in Folge
+    bis zum letzten gewerteten Spiel (Verlust = Profit <= 0, Unentschied bei Home/Away also verloren).
+    """
+    from datetime import timezone
+
+    def not_started(date: Any) -> bool:
+        # upcoming_games enthält auch schon angepfiffene Spiele, bis ihr Ergebnis da ist
+        try:
+            ko = datetime.fromisoformat(str(date))
+        except (TypeError, ValueError):
+            return True
+        if ko.tzinfo is None:
+            return ko >= datetime.now()
+        return ko >= datetime.now(timezone.utc)
+
+    matches: List[Dict[str, Any]] = []
+    strategies: List[Dict[str, Any]] = []
+    for p in presets or []:
+        pid, name = p.get("id"), p.get("name")
+        try:
+            a = analyze(p.get("filters") or {}, limit_results=200)
+        except Exception as e:
+            strategies.append({"id": pid, "name": name, "ok": False, "error": str(e), "n_upcoming": 0})
+            continue
+        if not a.get("ok"):
+            strategies.append(
+                {"id": pid, "name": name, "ok": False, "error": a.get("error"), "n_upcoming": 0}
+            )
+            continue
+        m = a.get("metrics") or {}
+        up = a.get("upcoming") or {}
+        streak = {
+            "losing_streak": int(m.get("current_losing_streak") or 0),
+            "winning_streak": int(m.get("current_winning_streak") or 0),
+        }
+        up_matches = [x for x in (up.get("matches") or []) if not_started(x.get("date"))]
+        strategies.append(
+            {
+                "id": pid,
+                "name": name,
+                "ok": True,
+                "error": up.get("error"),
+                "skipped": bool(up.get("skipped")),
+                "message": up.get("message"),
+                "n_upcoming": len(up_matches),
+                "n_bets": int(m.get("n") or 0),
+                "roi_pct": m.get("roi_pct"),
+                "max_losing_streak": int(m.get("max_losing_streak") or 0),
+                **streak,
+            }
+        )
+        for x in up_matches:
+            matches.append(
+                {
+                    "game_id": x.get("game_id"),
+                    "date": x.get("date"),
+                    "country": x.get("country"),
+                    "league": x.get("league"),
+                    "home": x.get("home"),
+                    "away": x.get("away"),
+                    "market": x.get("market"),
+                    "odds": x.get("odds"),
+                    "strategy_id": pid,
+                    "strategy": name,
+                    **streak,
+                }
+            )
+    matches.sort(key=lambda r: (str(r.get("date") or ""), str(r.get("strategy") or "")))
+    return {"ok": True, "n": len(matches), "matches": matches, "strategies": strategies}

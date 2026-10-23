@@ -261,6 +261,15 @@ def strategy_presets():
     return {"presets": presets_svc.load_presets()}
 
 
+@app.post("/api/strategy/presets/upcoming")
+def strategy_presets_upcoming(body: Dict[str, Any] = Body(...)):
+    """Bevorstehende Spiele aller übergebenen Strategien + aktuelle Siegen-/Niederlagen-Serie."""
+    try:
+        return strategy_svc.presets_upcoming(body.get("presets") or [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @app.post("/api/strategy/presets")
 def strategy_presets_save(body: Dict[str, Any] = Body(...)):
     """Komplette Preset-Liste speichern (ersetzt den bisherigen Stand)."""
