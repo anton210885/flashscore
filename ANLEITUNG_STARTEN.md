@@ -2,7 +2,7 @@
 
 ## Normalbetrieb (ohne Fenster)
 
-- **Starten:** Doppelklick auf `start_hidden.vbs` → öffnet http://127.0.0.1:8000
+- **Starten:** Doppelklick auf `start_web.bat` (oder `start_hidden.vbs`) → öffnet http://127.0.0.1:8000
   (API, Oberfläche und Live-Pipeline laufen unsichtbar im Hintergrund)
 - **Stoppen:** Doppelklick auf `stop_web.bat`
 - **Autostart bei Anmeldung:** `powershell -ExecutionPolicy Bypass -File autostart.ps1`
@@ -10,7 +10,7 @@
 - **Nach Änderungen am Frontend** (`web\frontend\src`): `build_ui.bat`, dann Seite neu laden
 - **Fehler/Ausgaben:** `logs\uvicorn.log` und `logs\uvicorn.log.err`
 
-Zum Entwickeln mit sichtbaren Fenstern und Live-Reload weiterhin `start_web.bat`.
+Zum Entwickeln mit sichtbaren Fenstern und Live-Reload (:5173): `start_dev.bat`.
 
 ## Problem: Python nicht gefunden
 

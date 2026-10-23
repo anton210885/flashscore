@@ -1,4 +1,4 @@
 @echo off
-cd /d "%~dp0"
-powershell -ExecutionPolicy Bypass -File "%~dp0start_web.ps1"
-pause
+rem Normalbetrieb: API + UI + Live-Pipeline ohne Fenster, oeffnet http://127.0.0.1:8000
+rem Entwickeln mit sichtbaren Fenstern und Live-Reload (:5173): start_dev.bat
+start "" wscript.exe "%~dp0start_hidden.vbs"
