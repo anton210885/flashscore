@@ -22,6 +22,7 @@ PREMATCH_PERCENTILE_METRICS = (
     "chance",
     "glicko_rating",
     "rating_diff",
+    "rating_sum",
     "glicko_diff",
     "glicko_xg",
     "xg_glicko_sum",
@@ -70,6 +71,7 @@ PERCENTILE_METRIC_LABELS = {
     "rating_diff": "Rating Diff (H−A)",
     "glicko_diff": "Rating Diff (H−A)",
     "rating_ratio": "Rating-Verhältnis H/A",
+    "rating_sum": "Rating Summe (H+A)",
     "glicko_xg": "xG Summe (Glicko)",
     "xg_glicko_sum": "xG Summe (Glicko)",
     "xg_glicko_diff": "xG Diff Glicko (H−A)",
@@ -1360,6 +1362,11 @@ def _metric_value(row: Dict[str, Any], metric: str) -> Optional[float]:
         if rh is None and ra is None:
             return None
         return ((rh or 0.0) + (ra or 0.0)) / (2.0 if rh is not None and ra is not None else 1.0)
+    if metric == "rating_sum":
+        rh, ra = _f(row.get("rating_h")), _f(row.get("rating_a"))
+        if rh is None or ra is None:
+            return None
+        return rh + ra
     if metric == "rating_diff" or metric == "glicko_diff":
         rh, ra = _f(row.get("rating_h")), _f(row.get("rating_a"))
         if rh is None or ra is None:
@@ -1492,6 +1499,7 @@ RANKABLE_METRICS = (
     "rating_avg",
     "rating_diff",
     "rating_ratio",
+    "rating_sum",
     "xg_glicko_home",
     "xg_glicko_away",
     "xg_glicko_sum",
@@ -1562,6 +1570,10 @@ METRIC_DESCRIPTIONS = {
     "rating_ratio": (
         "Verhältnis Glicko-Rating Home / Away. "
         "> 1 = Heimseite stärker laut Rating; < 1 = Auswärtsseite stärker."
+    ),
+    "rating_sum": (
+        "Summe Glicko-Rating Home + Away. "
+        "Misst das Gesamtniveau beider Teams (= 2 × rating_avg)."
     ),
     "glicko_diff": (
         "Alias für rating_diff: Glicko Home − Away. "
@@ -1778,6 +1790,7 @@ BUCKET_METRICS = (
     "chance",
     "rating_diff",
     "rating_ratio",
+    "rating_sum",
     "glicko_diff",
     "rating_avg",
     "xg_glicko_sum",
@@ -1994,11 +2007,14 @@ OPTIMIZE_METRICS = (
     "rating_home",
     "rating_diff",
     "rating_ratio",
+    "rating_sum",
     "rating_avg",
     "xg_glicko_ratio",
     "xg_glicko_diff",
+    "xg_glicko_sum",
     "xg_form2_ratio",
     "xg_form2_diff",
+    "xg_form2_sum",
     "chance",
     "xroi_pct",
 )

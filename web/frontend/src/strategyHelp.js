@@ -57,6 +57,11 @@ export const CORR_METRIC_HELP = [
     text: 'Verhältnis Glicko-Rating Home / Away. > 1 = Heimseite stärker; < 1 = Auswärtsseite stärker.',
   },
   {
+    key: 'rating_sum',
+    label: 'rating_sum',
+    text: 'Summe Glicko-Rating Home + Away. Misst das Gesamtniveau beider Teams (= 2 × rating_avg).',
+  },
+  {
     key: 'xg_glicko_home',
     label: 'xg_glicko_home',
     text: 'Erwartete Tore (xG) der Heimmannschaft aus dem Glicko-Modell (pre-match) — Vorhersage, nicht die im Match erzielten xG.',
