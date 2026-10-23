@@ -1,6 +1,7 @@
 """Flashscore Web API – FastAPI Backend."""
 from __future__ import annotations
 
+import mimetypes
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -14,7 +15,7 @@ os.chdir(ROOT)
 
 from fastapi import FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 
 from database import ensure_schema
 from services import web_league_service as svc
@@ -59,13 +60,23 @@ app.add_middleware(
 )
 
 
-@app.get("/")
+# Windows-Registry liefert für .js oft text/plain — Browser führen das Modul dann nicht aus
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("image/svg+xml", ".svg")
+
+FRONTEND_DIST = os.path.join(ROOT, "web", "frontend", "dist")
+FRONTEND_INDEX = os.path.join(FRONTEND_DIST, "index.html")
+
+
+@app.get("/", include_in_schema=False)
 def root():
-    """Hinweis: die Oberfläche läuft auf Vite :5173, nicht hier."""
+    """Gebaute UI ausliefern; ohne Build Hinweis auf Vite (:5173)."""
+    if os.path.isfile(FRONTEND_INDEX):
+        return FileResponse(FRONTEND_INDEX)
     return {
-        "message": "Flashscore API läuft. UI bitte unter http://127.0.0.1:5173 öffnen.",
+        "message": "Flashscore API läuft. UI fehlt: build_ui.bat ausführen oder Vite unter http://127.0.0.1:5173 nutzen.",
         "docs": "http://127.0.0.1:8000/docs",
-        "ui": "http://127.0.0.1:5173",
         "health": "/api/health",
     }
 
@@ -375,3 +386,17 @@ def settings_ai_env_export():
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ── Gebaute UI (muss nach allen API-Routen stehen) ────────────────────────
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def frontend(full_path: str):
+    """Dateien aus dist/ ausliefern, sonst index.html (React-Router-Unterseiten wie /stats)."""
+    if full_path.startswith("api/") or not os.path.isfile(FRONTEND_INDEX):
+        raise HTTPException(status_code=404, detail="Not Found")
+    candidate = os.path.normpath(os.path.join(FRONTEND_DIST, full_path))
+    if candidate.startswith(FRONTEND_DIST + os.sep) and os.path.isfile(candidate):
+        return FileResponse(candidate)
+    return FileResponse(FRONTEND_INDEX)
