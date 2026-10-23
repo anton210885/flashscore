@@ -94,22 +94,29 @@ def _league_id_from_item(item: Dict[str, Any]) -> Optional[int]:
 
 
 def tracked_league_ids(conn) -> Set[int]:
-    """Ligen aus DB + Liga128 + European."""
-    ids: Set[int] = set()
-    try:
-        for r in conn.execute(
-            "SELECT DISTINCT league_id FROM games WHERE league_id IS NOT NULL"
-        ).fetchall():
-            ids.add(int(r[0]))
-    except Exception:
-        pass
-    try:
-        for r in conn.execute(
-            "SELECT DISTINCT league_id FROM upcoming_games WHERE league_id IS NOT NULL"
-        ).fetchall():
-            ids.add(int(r[0]))
-    except Exception:
-        pass
+    """Aktive Ligen (data/tracked_leagues.json) + Liga128 + European.
+
+    Ohne Liste: alle Ligen aus der DB — das wächst mit jedem Sync (Schneeball).
+    """
+    from services.league_scope import active_league_ids
+
+    active = active_league_ids()
+    ids: Set[int] = set(active) if active is not None else set()
+    if active is None:
+        try:
+            for r in conn.execute(
+                "SELECT DISTINCT league_id FROM games WHERE league_id IS NOT NULL"
+            ).fetchall():
+                ids.add(int(r[0]))
+        except Exception:
+            pass
+        try:
+            for r in conn.execute(
+                "SELECT DISTINCT league_id FROM upcoming_games WHERE league_id IS NOT NULL"
+            ).fetchall():
+                ids.add(int(r[0]))
+        except Exception:
+            pass
     try:
         from services.web_league_service import liga128_ids
 
@@ -442,6 +449,17 @@ class LivePipelineService:
     # ── Job 2: Endergebnis + Match-xG, danach Tabellen ────────────────
 
     @staticmethod
+    def _league_scope_sql(col: str) -> Tuple[str, List[Any]]:
+        """`AND col IN (...)` für aktive Ligen (data/tracked_leagues.json); leer = alle Ligen."""
+        from services.league_scope import active_league_ids
+
+        active = active_league_ids()
+        if active is None:
+            return "", []
+        ids = sorted(active)
+        return f"AND {col} IN ({','.join('?' * len(ids))})", ids
+
+    @staticmethod
     def _extract_match_xg(full: Dict[str, Any]) -> Tuple[Any, Any]:
         """Match-xG aus /Games/{id} — gleiche Quelle wie DatabaseManager.save_game."""
         data = full.get("data") if isinstance(full.get("data"), dict) else full
@@ -497,6 +515,7 @@ class LivePipelineService:
             datetime.now() - timedelta(minutes=self.result_after_minutes)
         ).strftime("%Y-%m-%dT%H:%M:%S")
         due_sql, due_params = self._due_clause("u.id", "result")
+        scope_sql, scope_params = self._league_scope_sql("u.league_id")
         try:
             result_ids = [
                 int(r[0])
@@ -506,10 +525,11 @@ class LivePipelineService:
                     WHERE COALESCE(u.date, '') <> ''
                       AND substr(u.date, 1, 19) <= ?
                       AND {due_sql}
+                      {scope_sql}
                     ORDER BY u.date DESC
                     LIMIT ?
                     """,
-                    [kickoff_before, *due_params, self.results_batch],
+                    [kickoff_before, *due_params, *scope_params, self.results_batch],
                 ).fetchall()
             ]
         except Exception as e:
@@ -541,6 +561,7 @@ class LivePipelineService:
         # 2) Fertig, aber Match-xG fehlt noch — nur in Liga-Saisons, die überhaupt xG haben
         since = (datetime.now() - timedelta(days=self.xg_lookback_days)).strftime("%Y-%m-%d")
         due_sql, due_params = self._due_clause("g.id", "xg")
+        scope_sql, scope_params = self._league_scope_sql("g.league_id")
         try:
             xg_ids = [
                 int(r[0])
@@ -556,10 +577,11 @@ class LivePipelineService:
                           AND s.calculated_xg_home IS NOT NULL
                       )
                       AND {due_sql}
+                      {scope_sql}
                     ORDER BY g.date DESC
                     LIMIT ?
                     """,
-                    [since, *due_params, self.results_batch],
+                    [since, *due_params, *scope_params, self.results_batch],
                 ).fetchall()
             ]
         except Exception as e:
@@ -639,7 +661,14 @@ class LivePipelineService:
             """,
             (since,),
         ).fetchall()
-        stale = [(int(a), int(b)) for a, b in rows if is_form2_league(a)][: self.tables_batch]
+        from services.league_scope import active_league_ids
+
+        active = active_league_ids()
+        stale = [
+            (int(a), int(b))
+            for a, b in rows
+            if is_form2_league(a) and (active is None or int(a) in active)
+        ][: self.tables_batch]
         for lid, yr in stale:
             recompute_league_season(conn, lid, yr)
             upsert_upcoming_for_league_season(conn, lid, yr)

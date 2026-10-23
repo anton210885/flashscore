@@ -165,8 +165,13 @@ def _leagues_from_ids(include_ids: Optional[set] = None, exclude_ids: Optional[s
 
 
 def list_leagues() -> List[Dict[str, Any]]:
-    """Meisterschaften Saison 26/27 (ohne Liga-128 und European)."""
-    return _leagues_from_ids(exclude_ids=exclusive_overview_ids())
+    """Meisterschaften Saison 26/27 (ohne Liga-128 und European), nur aktive Ligen."""
+    from services.league_scope import active_league_ids
+
+    active = active_league_ids()
+    if active is None:
+        return _leagues_from_ids(exclude_ids=exclusive_overview_ids())
+    return _leagues_from_ids(include_ids=active - exclusive_overview_ids())
 
 
 def list_liga128_leagues() -> List[Dict[str, Any]]:
