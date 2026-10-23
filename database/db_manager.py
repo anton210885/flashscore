@@ -157,7 +157,10 @@ class DatabaseManager:
                 # Direct game object
                 game = game_data
                 stats = game.get("statistics", {})
-            
+            # API liefert bei manchen Spielen "statistics": null
+            if not isinstance(stats, dict):
+                stats = {}
+
             # Extract basic game info
             game_id = game.get("id")
             if not game_id:

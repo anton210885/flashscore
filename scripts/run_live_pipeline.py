@@ -24,6 +24,9 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Live Pipeline Daemon")
     p.add_argument("--db", default="data/flashscore.db")
     p.add_argument("--sync-interval", type=int, default=180, help="Sekunden (Today-Sync)")
+    p.add_argument(
+        "--results-interval", type=int, default=600, help="Sekunden (Endergebnis/Match-xG/Tabellen)"
+    )
     p.add_argument("--odds-interval", type=int, default=900, help="Sekunden (Pre-match Odds)")
     p.add_argument("--enrich-interval", type=int, default=600, help="Sekunden (xG/Glicko)")
     p.add_argument("--api-delay", type=float, default=0.55)
@@ -62,6 +65,7 @@ def main() -> int:
         client,
         db,
         sync_interval=args.sync_interval,
+        results_interval=args.results_interval,
         odds_interval=args.odds_interval,
         enrich_interval=args.enrich_interval,
         api_delay=args.api_delay,
@@ -76,6 +80,7 @@ def main() -> int:
         pipe.running = True
         pipe.started_at = __import__("datetime").datetime.now().isoformat(timespec="seconds")
         pipe.job_sync()
+        pipe.job_results()
         pipe.job_odds()
         pipe.job_enrich()
         pipe.running = False

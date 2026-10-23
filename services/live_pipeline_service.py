@@ -1,10 +1,17 @@
 """Dauerhafter Pipeline-Daemon: Upcoming-Sync → Pre-match Odds → Post-match xG/Glicko.
 
-Drei Jobs mit eigenen Intervallen in einem Prozess:
+Jobs mit eigenen Intervallen in einem Prozess:
 
-1. sync   – Today-API + Promotion finished → games
-2. odds   – Opening/Closing für anstehende Spiele nachladen
-3. enrich – Glicko/xG für kürzlich beendete Spiele ohne xG
+1. sync    – Today-API + Promotion finished → games
+2. results – Endergebnis für Spiele mit vergangenem Anstoß, Match-xG nachladen,
+             danach Form2-Tabellen der betroffenen Liga-Saisons neu berechnen
+3. odds    – Opening/Closing für anstehende Spiele nachladen
+4. enrich  – Glicko/xG für kürzlich beendete Spiele ohne xG
+5. catchup – fehlende Spiele der laufenden Saison pro Liga
+
+Erfolglose Abfragen landen in `fetch_attempts` und werden erst nach einer
+wachsenden Wartezeit erneut versucht — so blockieren Spiele ohne Daten
+nicht jeden Lauf.
 """
 from __future__ import annotations
 
@@ -12,7 +19,7 @@ import json
 import os
 import time
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from services.match_status import FINISHED_STATUS_CODES
 from services import strategy_service as strat
@@ -20,6 +27,34 @@ from services import strategy_service as strat
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DEFAULT_STATUS_PATH = os.path.join(ROOT, "logs", "live_pipeline_status.json")
 PINNACLE = 4
+
+FETCH_ATTEMPTS_SQL = """
+CREATE TABLE IF NOT EXISTS fetch_attempts (
+    game_id INTEGER NOT NULL,
+    job TEXT NOT NULL,
+    tries INTEGER NOT NULL DEFAULT 0,
+    last_try TEXT,
+    next_try TEXT,
+    PRIMARY KEY (game_id, job)
+)
+"""
+
+# Wartezeit in Minuten nach dem n-ten erfolglosen Versuch (letzter Wert gilt danach weiter)
+BACKOFF_MINUTES: Dict[str, List[int]] = {
+    "result": [15, 15, 30, 60, 120, 360, 720, 1440],
+    "xg": [15, 30, 60, 120, 360, 720],
+    "glicko": [30, 60, 120, 360, 720],
+    "odds_close": [30, 60, 120, 240],
+    "odds_open": [30, 60, 120, 240],
+}
+# Danach wird ein Spiel für diesen Job nicht mehr abgefragt (None = nur Zeitfenster begrenzt)
+MAX_TRIES: Dict[str, Optional[int]] = {
+    "result": 12,
+    "xg": 8,
+    "glicko": 10,
+    "odds_close": None,
+    "odds_open": None,
+}
 
 
 def _now_iso() -> str:
@@ -107,6 +142,11 @@ class LivePipelineService:
         catchup_interval: int = 600,
         catchup_leagues_per_tick: int = 3,
         catchup_year: Optional[int] = None,
+        results_interval: int = 600,
+        results_batch: int = 40,
+        result_after_minutes: int = 150,
+        xg_lookback_days: int = 3,
+        tables_batch: int = 15,
         status_path: str = DEFAULT_STATUS_PATH,
         all_leagues: bool = False,
         log: Optional[Callable[[str], None]] = None,
@@ -124,6 +164,11 @@ class LivePipelineService:
         self.odds_horizon_hours = max(6, int(odds_horizon_hours))
         self.enrich_batch = max(5, int(enrich_batch))
         self.odds_batch = max(5, int(odds_batch))
+        self.results_interval = max(120, int(results_interval))
+        self.results_batch = max(5, int(results_batch))
+        self.result_after_minutes = max(105, int(result_after_minutes))
+        self.xg_lookback_days = max(1, int(xg_lookback_days))
+        self.tables_batch = max(1, int(tables_batch))
         self.status_path = status_path
         self.all_leagues = bool(all_leagues)
         self._log = log or (lambda m: print(m, flush=True))
@@ -132,16 +177,67 @@ class LivePipelineService:
         self._catchup_idx = 0
         self._jobs: Dict[str, Dict[str, Any]] = {
             "sync": {},
+            "results": {},
             "odds": {},
             "enrich": {},
             "catchup": {},
         }
+        conn = self.db.get_connection()
+        conn.execute(FETCH_ATTEMPTS_SQL)
+        conn.commit()
 
     def log(self, msg: str) -> None:
         self._log(f"[{_now_iso()}] {msg}")
 
     def _sleep_api(self) -> None:
         time.sleep(self.api_delay)
+
+    # ── Wiederholungssperre (fetch_attempts) ──────────────────────────
+
+    def _due_clause(self, id_col: str, job: str) -> Tuple[str, List[Any]]:
+        """SQL-Bedingung: Spiel ist für `job` fällig (keine Wartezeit offen, Limit nicht erreicht)."""
+        max_tries = MAX_TRIES.get(job) or 1_000_000_000
+        sql = (
+            "NOT EXISTS (SELECT 1 FROM fetch_attempts fa "
+            f"WHERE fa.game_id = {id_col} AND fa.job = ? "
+            "AND (fa.next_try > ? OR fa.tries >= ?))"
+        )
+        return sql, [job, _now_iso(), max_tries]
+
+    def _record_attempt(self, game_id: int, job: str, ok: bool) -> None:
+        """Erfolg → Eintrag löschen; sonst Versuch zählen und nächste Abfrage nach hinten schieben."""
+        conn = self.db.get_connection()
+        if ok:
+            conn.execute(
+                "DELETE FROM fetch_attempts WHERE game_id = ? AND job = ?", (int(game_id), job)
+            )
+            conn.commit()
+            return
+        row = conn.execute(
+            "SELECT tries FROM fetch_attempts WHERE game_id = ? AND job = ?", (int(game_id), job)
+        ).fetchone()
+        tries = (int(row[0]) if row else 0) + 1
+        steps = BACKOFF_MINUTES[job]
+        wait = steps[min(tries, len(steps)) - 1]
+        now = datetime.now()
+        conn.execute(
+            """
+            INSERT INTO fetch_attempts (game_id, job, tries, last_try, next_try)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(game_id, job) DO UPDATE SET
+                tries = excluded.tries,
+                last_try = excluded.last_try,
+                next_try = excluded.next_try
+            """,
+            (
+                int(game_id),
+                job,
+                tries,
+                now.isoformat(timespec="seconds"),
+                (now + timedelta(minutes=wait)).isoformat(timespec="seconds"),
+            ),
+        )
+        conn.commit()
 
     def _write_status(self, extra: Optional[Dict[str, Any]] = None) -> None:
         os.makedirs(os.path.dirname(self.status_path), exist_ok=True)
@@ -151,6 +247,7 @@ class LivePipelineService:
             "updated_at": _now_iso(),
             "intervals": {
                 "sync_s": self.sync_interval,
+                "results_s": self.results_interval,
                 "odds_s": self.odds_interval,
                 "enrich_s": self.enrich_interval,
                 "catchup_s": self.catchup_interval,
@@ -342,7 +439,220 @@ class LivePipelineService:
         self._jobs["sync"] = {"last_run": _now_iso(), "ok": True, "stats": stats}
         return stats
 
-    # ── Job 2: Pre-match odds ─────────────────────────────────────────
+    # ── Job 2: Endergebnis + Match-xG, danach Tabellen ────────────────
+
+    @staticmethod
+    def _extract_match_xg(full: Dict[str, Any]) -> Tuple[Any, Any]:
+        """Match-xG aus /Games/{id} — gleiche Quelle wie DatabaseManager.save_game."""
+        data = full.get("data") if isinstance(full.get("data"), dict) else full
+        game = data.get("game", data) if isinstance(data, dict) else {}
+        stats = data.get("statistics") or (game.get("statistics") if isinstance(game, dict) else None) or {}
+        home = stats.get("calculatedXgHome")
+        away = stats.get("calculatedXgAway")
+        if home is None:
+            home = stats.get("expectedGoalsHome")
+        if away is None:
+            away = stats.get("expectedGoalsAway")
+        return home, away
+
+    def _api_error(self, stats: Dict[str, Any], tag: str, gid: int, e: Exception) -> bool:
+        """Fehler loggen; True = Rate-Limit (Versuch nicht zählen)."""
+        stats["errors"] += 1
+        msg = str(e)
+        if "429" in msg:
+            self.log(f"{tag}: Rate-Limit — 20s Pause")
+            time.sleep(20)
+            return True
+        if stats["errors"] <= 5:
+            self.log(f"{tag}: Fehler {gid}: {msg[:80]}")
+        return False
+
+    def job_results(self) -> Dict[str, Any]:
+        """Endergebnis für alle Spiele mit vergangenem Anstoß — auch wenn sie nicht
+        mehr in der Today-Liste stehen. Danach fehlendes Match-xG nachladen und
+        die Form2-Tabellen (xG/xGA-Schnitte) der betroffenen Liga-Saisons neu berechnen.
+        """
+        stats: Dict[str, Any] = {
+            "cleaned": 0,
+            "checked": 0,
+            "promoted": 0,
+            "not_finished": 0,
+            "xg_checked": 0,
+            "xg_loaded": 0,
+            "tables_refreshed": 0,
+            "errors": 0,
+        }
+        conn = self.db.get_connection()
+
+        # Reste: Spiel steht schon in games, aber noch in upcoming_games
+        try:
+            cur = conn.execute("DELETE FROM upcoming_games WHERE id IN (SELECT id FROM games)")
+            conn.commit()
+            stats["cleaned"] = max(0, cur.rowcount)
+        except Exception as e:
+            self.log(f"results: Aufräumen fehlgeschlagen: {e}")
+
+        # 1) Anstoß lange genug vorbei → Spiel holen, neueste zuerst
+        kickoff_before = (
+            datetime.now() - timedelta(minutes=self.result_after_minutes)
+        ).strftime("%Y-%m-%dT%H:%M:%S")
+        due_sql, due_params = self._due_clause("u.id", "result")
+        try:
+            result_ids = [
+                int(r[0])
+                for r in conn.execute(
+                    f"""
+                    SELECT u.id FROM upcoming_games u
+                    WHERE COALESCE(u.date, '') <> ''
+                      AND substr(u.date, 1, 19) <= ?
+                      AND {due_sql}
+                    ORDER BY u.date DESC
+                    LIMIT ?
+                    """,
+                    [kickoff_before, *due_params, self.results_batch],
+                ).fetchall()
+            ]
+        except Exception as e:
+            self.log(f"results: Query-Fehler: {e}")
+            result_ids = []
+
+        for gid in result_ids:
+            stats["checked"] += 1
+            self._sleep_api()
+            try:
+                # nicht beendet → save_game aktualisiert nur upcoming_games (Status/Spielstand)
+                saved = self.db.save_game(self.client.get_game(gid))
+                done = (
+                    conn.execute("SELECT 1 FROM games WHERE id = ?", (gid,)).fetchone()
+                    is not None
+                )
+            except Exception as e:
+                if not self._api_error(stats, "results", gid, e):
+                    self._record_attempt(gid, "result", False)
+                continue
+            self._record_attempt(gid, "result", done)
+            if done:
+                stats["promoted"] += 1
+            elif not saved:
+                stats["errors"] += 1
+            else:
+                stats["not_finished"] += 1
+
+        # 2) Fertig, aber Match-xG fehlt noch — nur in Liga-Saisons, die überhaupt xG haben
+        since = (datetime.now() - timedelta(days=self.xg_lookback_days)).strftime("%Y-%m-%d")
+        due_sql, due_params = self._due_clause("g.id", "xg")
+        try:
+            xg_ids = [
+                int(r[0])
+                for r in conn.execute(
+                    f"""
+                    SELECT g.id FROM games g
+                    WHERE substr(COALESCE(g.date, ''), 1, 10) >= ?
+                      AND (g.calculated_xg_home IS NULL OR g.calculated_xg_away IS NULL)
+                      AND EXISTS (
+                        SELECT 1 FROM games s
+                        WHERE s.league_id = g.league_id
+                          AND s.season_year = g.season_year
+                          AND s.calculated_xg_home IS NOT NULL
+                      )
+                      AND {due_sql}
+                    ORDER BY g.date DESC
+                    LIMIT ?
+                    """,
+                    [since, *due_params, self.results_batch],
+                ).fetchall()
+            ]
+        except Exception as e:
+            self.log(f"results: xG-Query-Fehler: {e}")
+            xg_ids = []
+
+        for gid in xg_ids:
+            stats["xg_checked"] += 1
+            self._sleep_api()
+            try:
+                home_xg, away_xg = self._extract_match_xg(self.client.get_game(gid))
+            except Exception as e:
+                if not self._api_error(stats, "results[xg]", gid, e):
+                    self._record_attempt(gid, "xg", False)
+                continue
+            ok = home_xg is not None and away_xg is not None
+            if ok:
+                # nur xG-Spalten — Quoten/Events des Spiels bleiben unangetastet
+                conn.execute(
+                    """
+                    UPDATE games
+                    SET calculated_xg_home = ?, calculated_xg_away = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (home_xg, away_xg, datetime.now().isoformat(), gid),
+                )
+                conn.commit()
+                stats["xg_loaded"] += 1
+            self._record_attempt(gid, "xg", ok)
+
+        # 3) Tabellen nachziehen
+        try:
+            stats["tables_refreshed"] = self._refresh_tables()
+        except Exception as e:
+            stats["errors"] += 1
+            self.log(f"results: Tabellen-Update fehlgeschlagen: {e}")
+
+        self.log(
+            f"results: cleaned={stats['cleaned']} checked={stats['checked']} "
+            f"promoted={stats['promoted']} not_finished={stats['not_finished']} "
+            f"xg={stats['xg_loaded']}/{stats['xg_checked']} "
+            f"tables={stats['tables_refreshed']} err={stats['errors']}"
+        )
+        self._jobs["results"] = {"last_run": _now_iso(), "ok": True, "stats": stats}
+        return stats
+
+    def _refresh_tables(self) -> int:
+        """Form2 für Liga-Saisons neu berechnen, deren Spiele neuer sind als ihre Form2-Werte.
+
+        Vergleicht Zeitstempel statt sich Änderungen zu merken — erfasst so auch
+        Spiele, die Backfills, GUI oder Catch-up geschrieben haben.
+        """
+        from services.form2_service import (
+            is_form2_league,
+            recompute_league_season,
+            upsert_upcoming_for_league_season,
+        )
+
+        conn = self.db.get_connection()
+        since = (datetime.now() - timedelta(days=14)).strftime("%Y-%m-%d")
+        rows = conn.execute(
+            """
+            WITH recent AS (
+                SELECT league_id, season_year, MAX(updated_at) AS last_game
+                FROM games
+                WHERE substr(COALESCE(date, ''), 1, 10) >= ?
+                  AND league_id IS NOT NULL AND season_year IS NOT NULL
+                GROUP BY league_id, season_year
+            )
+            SELECT r.league_id, r.season_year FROM recent r
+            WHERE COALESCE((
+                SELECT MAX(f.updated_at) FROM games g
+                JOIN game_form2 f ON f.game_id = g.id
+                WHERE g.league_id = r.league_id AND g.season_year = r.season_year
+            ), '') < r.last_game
+            ORDER BY r.last_game DESC
+            """,
+            (since,),
+        ).fetchall()
+        stale = [(int(a), int(b)) for a, b in rows if is_form2_league(a)][: self.tables_batch]
+        for lid, yr in stale:
+            recompute_league_season(conn, lid, yr)
+            upsert_upcoming_for_league_season(conn, lid, yr)
+        if stale:
+            try:
+                from services.web_league_service import invalidate_overview_cache
+
+                invalidate_overview_cache()
+            except Exception:
+                pass
+        return len(stale)
+
+    # ── Job 3: Pre-match odds ─────────────────────────────────────────
 
     def job_odds(self) -> Dict[str, int]:
         stats = {"closing_loaded": 0, "opening_loaded": 0, "empty": 0, "errors": 0, "checked": 0}
@@ -353,11 +663,12 @@ class LivePipelineService:
         past = (datetime.now() - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%S")
 
         # Closing zuerst (fehlt ganz)
+        due_sql, due_params = self._due_clause("u.id", "odds_close")
         try:
             missing_close = [
                 int(r[0])
                 for r in conn.execute(
-                    """
+                    f"""
                     SELECT u.id FROM upcoming_games u
                     WHERE COALESCE(u.date, '') >= ?
                       AND COALESCE(u.date, '') <= ?
@@ -365,10 +676,11 @@ class LivePipelineService:
                         SELECT 1 FROM game_odds o
                         WHERE o.game_id = u.id AND o.value IS NOT NULL
                       )
+                      AND {due_sql}
                     ORDER BY u.date ASC
                     LIMIT ?
                     """,
-                    (past, horizon, self.odds_batch),
+                    [past, horizon, *due_params, self.odds_batch],
                 ).fetchall()
             ]
         except Exception:
@@ -384,15 +696,18 @@ class LivePipelineService:
                 stats["closing_loaded"] += r.get("loaded", 0)
                 stats["empty"] += r.get("empty", 0)
                 stats["errors"] += r.get("errors", 0)
+                if not r.get("errors"):
+                    self._record_attempt(gid, "odds_close", bool(r.get("loaded")))
             except Exception:
                 stats["errors"] += 1
 
         # Opening für Spiele mit Closing
+        due_sql, due_params = self._due_clause("u.id", "odds_open")
         try:
             missing_open = [
                 int(r[0])
                 for r in conn.execute(
-                    """
+                    f"""
                     SELECT u.id FROM upcoming_games u
                     WHERE COALESCE(u.date, '') >= ?
                       AND COALESCE(u.date, '') <= ?
@@ -406,10 +721,11 @@ class LivePipelineService:
                           AND o.opening_value IS NOT NULL
                           AND o.opening_value > 0
                       )
+                      AND {due_sql}
                     ORDER BY u.date ASC
                     LIMIT ?
                     """,
-                    (past, horizon, self.odds_batch),
+                    [past, horizon, *due_params, self.odds_batch],
                 ).fetchall()
             ]
         except Exception:
@@ -425,6 +741,8 @@ class LivePipelineService:
                 stats["opening_loaded"] += r.get("loaded", 0)
                 stats["empty"] += r.get("empty", 0)
                 stats["errors"] += r.get("errors", 0)
+                if not r.get("errors"):
+                    self._record_attempt(gid, "odds_open", bool(r.get("loaded")))
             except Exception:
                 stats["errors"] += 1
 
@@ -451,22 +769,20 @@ class LivePipelineService:
                         """,
                         (gid,),
                     ).fetchone()
-                    if row and row[0] is not None and row[1] is not None:
-                        stats["loaded"] += 1
-                        if tag == "upcoming":
-                            stats["upcoming_xg"] += 1
-                    else:
-                        stats["no_data"] += 1
+                    ok = bool(row and row[0] is not None and row[1] is not None)
                 else:
-                    stats["no_data"] += 1
+                    ok = False
             except Exception as e:
-                stats["errors"] += 1
-                msg = str(e)
-                if "429" in msg:
-                    self.log(f"enrich[{tag}]: Rate-Limit — 20s Pause")
-                    time.sleep(20)
-                elif stats["errors"] <= 5:
-                    self.log(f"enrich[{tag}]: Fehler {gid}: {msg[:80]}")
+                if not self._api_error(stats, f"enrich[{tag}]", gid, e):
+                    self._record_attempt(gid, "glicko", False)
+                continue
+            self._record_attempt(gid, "glicko", ok)
+            if ok:
+                stats["loaded"] += 1
+                if tag == "upcoming":
+                    stats["upcoming_xg"] += 1
+            else:
+                stats["no_data"] += 1
 
     def job_enrich(self) -> Dict[str, int]:
         """Parallel zum Historien-Backfill: Upcoming + kürzlich fertige ohne xG."""
@@ -492,11 +808,12 @@ class LivePipelineService:
         up_limit = max(10, self.enrich_batch // 2 + self.enrich_batch % 2)
         fin_limit = max(10, self.enrich_batch // 2)
 
+        due_sql, due_params = self._due_clause("u.id", "glicko")
         try:
             upcoming_ids = [
                 int(r[0])
                 for r in conn.execute(
-                    """
+                    f"""
                     SELECT u.id FROM upcoming_games u
                     LEFT JOIN game_glicko gl ON gl.game_id = u.id
                     WHERE COALESCE(u.date, '') >= ?
@@ -508,21 +825,23 @@ class LivePipelineService:
                         OR gl.home_xg IS NULL
                         OR gl.away_xg IS NULL
                       )
+                      AND {due_sql}
                     ORDER BY u.date ASC
                     LIMIT ?
                     """,
-                    (past, horizon, up_limit),
+                    [past, horizon, *due_params, up_limit],
                 ).fetchall()
             ]
         except Exception as e:
             self.log(f"enrich: Upcoming-Query-Fehler: {e}")
             upcoming_ids = []
 
+        due_sql, due_params = self._due_clause("g.id", "glicko")
         try:
             finished_ids = [
                 int(r[0])
                 for r in conn.execute(
-                    """
+                    f"""
                     SELECT g.id FROM games g
                     LEFT JOIN game_glicko gl ON gl.game_id = g.id
                     WHERE substr(COALESCE(g.date, ''), 1, 10) >= ?
@@ -531,10 +850,11 @@ class LivePipelineService:
                         OR gl.home_xg IS NULL
                         OR gl.away_xg IS NULL
                       )
+                      AND {due_sql}
                     ORDER BY g.date DESC
                     LIMIT ?
                     """,
-                    (since, fin_limit),
+                    [since, *due_params, fin_limit],
                 ).fetchall()
             ]
         except Exception as e:
@@ -546,43 +866,13 @@ class LivePipelineService:
 
         self._fetch_glicko_ids(upcoming_ids, stats, tag="upcoming")
         self._fetch_glicko_ids(finished_ids, stats, tag="finished")
-
-        # Form2: Liga-Saison der fertigen Spiele neu berechnen (Match-xG→Avgs)
-        form2_ok = 0
-        form2_err = 0
-        if finished_ids:
-            try:
-                from services.form2_service import refresh_for_game
-
-                seen_keys = set()
-                for gid in finished_ids:
-                    try:
-                        row = conn.execute(
-                            "SELECT league_id, season_year FROM games WHERE id = ?",
-                            (int(gid),),
-                        ).fetchone()
-                        if not row or row[0] is None or row[1] is None:
-                            continue
-                        key = (int(row[0]), int(row[1]))
-                        if key in seen_keys:
-                            continue
-                        seen_keys.add(key)
-                        refresh_for_game(conn, int(gid))
-                        form2_ok += 1
-                    except Exception:
-                        form2_err += 1
-            except Exception as e:
-                self.log(f"enrich: Form2-Update-Fehler: {e}")
-                form2_err += 1
-        stats["form2_seasons"] = form2_ok
-        stats["form2_errors"] = form2_err
+        # Form2 rechnet mit Match-xG aus games — das zieht job_results nach, nicht Glicko
 
         self.log(
             f"enrich: checked={stats['checked']} "
             f"upcoming={stats['upcoming_checked']} finished={stats['finished_checked']} "
             f"xg_ok={stats['loaded']} (upcoming_xg={stats['upcoming_xg']}) "
-            f"no_xg_yet={stats['no_data']} err={stats['errors']} "
-            f"form2_seasons={form2_ok}"
+            f"no_xg_yet={stats['no_data']} err={stats['errors']}"
         )
         self._jobs["enrich"] = {"last_run": _now_iso(), "ok": True, "stats": stats}
         return stats
@@ -689,11 +979,13 @@ class LivePipelineService:
         self.started_at = _now_iso()
         self.log(
             f"Live-Pipeline gestartet | sync={self.sync_interval}s "
+            f"results={self.results_interval}s "
             f"odds={self.odds_interval}s enrich={self.enrich_interval}s "
             f"catchup={self.catchup_interval}s year={self.catchup_year} "
             f"delay={self.api_delay}s all_leagues={self.all_leagues}"
         )
         next_sync = 0.0
+        next_results = 0.0
         next_odds = 0.0
         next_enrich = 0.0
         next_catchup = 0.0
@@ -706,6 +998,10 @@ class LivePipelineService:
                     if now >= next_sync:
                         self.job_sync()
                         next_sync = time.time() + self.sync_interval
+                        self._write_status()
+                    if now >= next_results:
+                        self.job_results()
+                        next_results = time.time() + self.results_interval
                         self._write_status()
                     if now >= next_odds:
                         self.job_odds()
