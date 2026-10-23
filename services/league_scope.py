@@ -1,4 +1,6 @@
-"""Welche Ligen aktiv verfolgt werden: Ligen-Tab und Endergebnis-Job der Pipeline.
+"""Welche Ligen aktiv verfolgt werden: Ligen-Tab und Catch-up (ganze Saison nachladen).
+
+Sync und Endergebnisse laufen für alle Ligen — Strategien wetten auch außerhalb der Liste.
 
 Quelle: data/tracked_leagues.json + data/liga128_leagues.json + data/league_watchlist.json.
 Fehlt tracked_leagues.json, gilt keine Begrenzung (None) — wie vor der Liste.
