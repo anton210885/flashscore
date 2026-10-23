@@ -1,0 +1,50 @@
+# Prüft bei jedem Push / Pull Request, ob Backend und Frontend fehlerfrei sind.
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Abhängigkeiten installieren
+        run: pip install -r requirements.txt
+
+      - name: Syntax aller Python-Dateien prüfen
+        run: python -m compileall -q .
+
+      - name: FastAPI-App importieren
+        env:
+          FLASHSCORE_PIPELINE: "0"
+        run: python -c "import web.backend.app as a; print('Routen:', len(a.app.routes))"
+
+  frontend:
+    name: Frontend (React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

@@ -1,0 +1,41 @@
+# Erstellt automatisch ein GitHub-Release, sobald ein Tag wie v1.2.0 gepusht wird.
+#   git tag v1.2.0
+#   git push origin v1.2.0
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+
+      - name: Frontend bauen
+        working-directory: web/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Frontend-Build packen
+        run: cd web/frontend/dist && zip -r "$GITHUB_WORKSPACE/frontend-${GITHUB_REF_NAME}.zip" .
+
+      - name: Release mit automatischer Änderungsliste erstellen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "frontend-${GITHUB_REF_NAME}.zip" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
