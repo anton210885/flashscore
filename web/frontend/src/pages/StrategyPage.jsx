@@ -21,6 +21,7 @@ import {
   saveStrategyPreset,
   getStrategyPreset,
   deleteStrategyPreset,
+  syncStrategyPresets,
 } from '../strategyPresetsStore'
 import {
   ANALYSE_HELP_TITLE,
@@ -446,6 +447,7 @@ export default function StrategyPage() {
     }
     const onPresets = () => setPresets(listStrategyPresets())
     window.addEventListener('strategy-presets', onPresets)
+    syncStrategyPresets().catch(() => {})
     return () => window.removeEventListener('strategy-presets', onPresets)
   }, [])
 

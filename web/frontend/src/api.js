@@ -115,6 +115,8 @@ export const api = {
     if (q) params.set('q', q)
     return get(`/api/games?${params.toString()}`)
   },
+  strategyPresets: () => get('/api/strategy/presets'),
+  strategyPresetsSave: (presets) => post('/api/strategy/presets', { presets }),
   settingsAi: () => get('/api/settings/ai'),
   settingsAiSave: (body) => post('/api/settings/ai', body),
   settingsAiClear: () => del('/api/settings/ai/key'),

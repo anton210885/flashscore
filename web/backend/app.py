@@ -23,6 +23,7 @@ from services import sstats_catalog_service as catalog_svc
 from services import web_games_service as games_svc
 from services import web_stats_service as stats_svc
 from services import web_strategy_service as strategy_svc
+from services import strategy_presets_service as presets_svc
 from services import ai_settings_service as ai_settings_svc
 from services.pipeline_autostart import (
     pipeline_status_brief,
@@ -252,6 +253,21 @@ def strategy_optimize_params(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/api/strategy/presets")
+def strategy_presets():
+    """Gespeicherte Strategie-Filter (data/strategy_presets.json)."""
+    return {"presets": presets_svc.load_presets()}
+
+
+@app.post("/api/strategy/presets")
+def strategy_presets_save(body: Dict[str, Any] = Body(...)):
+    """Komplette Preset-Liste speichern (ersetzt den bisherigen Stand)."""
+    try:
+        return {"presets": presets_svc.save_presets(body.get("presets"))}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/games")

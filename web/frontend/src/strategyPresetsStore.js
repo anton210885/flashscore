@@ -1,6 +1,12 @@
-/** Gespeicherte Strategie-Filter (localStorage). */
+/** Gespeicherte Strategie-Filter: Server (data/strategy_presets.json), localStorage nur als Cache.
+ *
+ * localStorage gilt pro Adresse (:5173 vs. :8000) — deshalb liegt der Stand auf dem Server.
+ */
+import { api } from './api'
 
 const KEY = 'flashscore_strategy_presets'
+// Gesetzt, sobald die Presets dieses Browsers/dieser Adresse einmal zum Server übernommen wurden
+const MIGRATED_KEY = 'flashscore_strategy_presets_on_server'
 
 function readAll() {
   try {
@@ -13,10 +19,31 @@ function readAll() {
   }
 }
 
-function writeAll(list) {
+function writeCache(list) {
   localStorage.setItem(KEY, JSON.stringify(list))
   window.dispatchEvent(new CustomEvent('strategy-presets', { detail: list }))
   return list
+}
+
+function writeAll(list) {
+  writeCache(list)
+  api.strategyPresetsSave(list).catch(() => {})
+  return list
+}
+
+/** Stand vom Server holen; beim ersten Mal lokale Presets dieser Adresse dazunehmen. */
+export async function syncStrategyPresets() {
+  const server = (await api.strategyPresets()).presets || []
+  let list = server
+  if (!localStorage.getItem(MIGRATED_KEY)) {
+    const names = new Set(server.map((p) => String(p.name || '').toLowerCase()))
+    const local = readAll().filter((p) => !names.has(String(p.name || '').toLowerCase()))
+    if (local.length) {
+      list = (await api.strategyPresetsSave([...server, ...local])).presets || list
+    }
+    localStorage.setItem(MIGRATED_KEY, '1')
+  }
+  return writeCache(list)
 }
 
 export function listStrategyPresets() {
