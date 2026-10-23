@@ -259,9 +259,11 @@ function _fmtNum(v, digits = 2) {
 }
 
 function _parseCondition(condition) {
-  const m = String(condition || '').match(/([<>]=?)\s*([-+]?\d*\.?\d+)/)
+  // Backend zeigt Formeln wie „Rating Home − Away ≤ -50“ (≥/≤), ältere Stände „rating_diff <= -50“
+  const m = String(condition || '').match(/(≥|≤|[<>]=?)\s*([-+]?\d*\.?\d+)/)
   if (!m) return { op: null, thr: null }
-  return { op: m[1], thr: Number(m[2]) }
+  const op = { '≥': '>=', '≤': '<=' }[m[1]] || m[1]
+  return { op, thr: Number(m[2]) }
 }
 
 function _rulePlain(rule) {

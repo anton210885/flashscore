@@ -1676,6 +1676,37 @@ def rule_description(rule: str) -> str:
     return RULE_DESCRIPTIONS.get(rule, f"Regel „{rule}“.")
 
 
+# Bedingungen lesbar als Formel anzeigen — Richtung (Home − Away) direkt sichtbar
+METRIC_FORMULAS = {
+    "rating_diff": "Rating Home − Away",
+    "glicko_diff": "Rating Home − Away",
+    "rating_ratio": "Rating Home ÷ Away",
+    "rating_sum": "Rating Home + Away",
+    "rating_avg": "(Rating Home + Away) ÷ 2",
+    "rating_home": "Rating Home",
+    "rating_away": "Rating Away",
+    "xg_glicko_diff": "xG Glicko Home − Away",
+    "xg_glicko_ratio": "xG Glicko Home ÷ Away",
+    "xg_glicko_sum": "xG Glicko Home + Away",
+    "glicko_xg": "xG Glicko Home + Away",
+    "xg_glicko_home": "xG Glicko Home",
+    "xg_glicko_away": "xG Glicko Away",
+    "xg_form2_diff": "xG Form2 Home − Away",
+    "xg_form2_ratio": "xG Form2 Home ÷ Away",
+    "xg_form2_sum": "xG Form2 Home + Away",
+    "xg_form2_home": "xG Form2 Home",
+    "xg_form2_away": "xG Form2 Away",
+    "xg_match_diff": "xG Match Home − Away",
+    "xg_match_ratio": "xG Match Home ÷ Away",
+    "xg_match_sum": "xG Match Home + Away",
+}
+
+
+def metric_expr(metric: str) -> str:
+    """Formel für Anzeige, z. B. rating_diff → „Rating Home − Away“; sonst der Metrik-Name."""
+    return METRIC_FORMULAS.get(metric, metric)
+
+
 def _percentile_cut(sorted_vals: List[float], pct: float) -> Optional[float]:
     """pct in 0..100; higher pct = higher threshold on ascending sorted list."""
     if not sorted_vals:
@@ -1726,6 +1757,9 @@ def rank_metrics_influence(
     ]
 
     ranked: List[Dict[str, Any]] = []
+    # Gleiche Spielauswahl nur einmal: bei Gleichständen fallen p70/p80 auf denselben Wert,
+    # und rating_sum wählt immer dieselben Spiele wie rating_avg
+    seen_subsets: set = set()
     for metric in metric_list:
         pairs = []
         for r in results:
@@ -1741,12 +1775,16 @@ def rank_metrics_influence(
                 continue
             if cmp_op == "gte":
                 subset = [r for v, r in pairs if v >= thr]
-                cond = f"{metric} >= {thr:.4g}"
+                cond = f"{metric_expr(metric)} ≥ {thr:.4g}"
             else:
                 subset = [r for v, r in pairs if v <= thr]
-                cond = f"{metric} <= {thr:.4g}"
+                cond = f"{metric_expr(metric)} ≤ {thr:.4g}"
             if len(subset) < min_n:
                 continue
+            subset_key = frozenset(id(r) for r in subset)
+            if subset_key in seen_subsets:
+                continue
+            seen_subsets.add(subset_key)
             m = compute_strategy_metrics(subset)
             roi = m.get("roi_pct") or 0.0
             profit = m.get("total_profit") or 0.0
@@ -2076,12 +2114,13 @@ def _candidate_constraints_for_metric(
         if key in seen:
             return
         seen.add(key)
+        expr = metric_expr(metric)
         if op == "gte":
-            cond = f"{metric} >= {_fmt_thr(lo)}"
+            cond = f"{expr} ≥ {_fmt_thr(lo)}"
         elif op == "lte":
-            cond = f"{metric} <= {_fmt_thr(hi)}"
+            cond = f"{expr} ≤ {_fmt_thr(hi)}"
         else:
-            cond = f"{metric} {_fmt_thr(lo)}–{_fmt_thr(hi)}"
+            cond = f"{_fmt_thr(lo)} ≤ {expr} ≤ {_fmt_thr(hi)}"
         out.append({
             "metric": metric,
             "op": op,
