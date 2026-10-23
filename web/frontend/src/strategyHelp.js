@@ -1,6 +1,7 @@
+import { metricName } from './metricNames'
 /** Texte für Korrelation & Metriken (Strategie-Tab). */
 
-export const CORR_METRIC_HELP = [
+const CORR_METRIC_HELP_RAW = [
   {
     key: 'chance',
     label: 'chance',
@@ -186,6 +187,11 @@ export const CORR_RULE_HELP = [
   { key: '<= p20', text: 'Nur Wetten im unteren ~20 % der Metric-Werte (bis 20. Perzentil).' },
   { key: '<= p10', text: 'Nur Wetten im unteren ~10 % der Metric-Werte (bis 10. Perzentil).' },
 ]
+
+export const CORR_METRIC_HELP = CORR_METRIC_HELP_RAW.map((m) => ({
+  ...m,
+  label: m.label === m.key ? `${metricName(m.key)} (${m.key})` : m.label,
+}))
 
 export const CORR_METRIC_MAP = Object.fromEntries(CORR_METRIC_HELP.map((m) => [m.key, m.text]))
 

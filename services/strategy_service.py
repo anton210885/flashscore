@@ -1676,35 +1676,73 @@ def rule_description(rule: str) -> str:
     return RULE_DESCRIPTIONS.get(rule, f"Regel „{rule}“.")
 
 
-# Bedingungen lesbar als Formel anzeigen — Richtung (Home − Away) direkt sichtbar
-METRIC_FORMULAS = {
+# Anzeige-Namen der Metriken (gleiches Schema wie web/frontend/src/metricNames.js).
+# Interne Schlüssel bleiben, damit gespeicherte Strategien weiter funktionieren.
+# Home/Away = Heimteam bzw. Gast; Klammer = Datenbasis; „xG Saison“ = früher „Form2“.
+METRIC_DISPLAY_NAMES = {
+    "rating_home": "Rating Home",
+    "rating_away": "Rating Away",
+    "rating_avg": "Rating Ø (Home + Away) ÷ 2",
+    "rating_sum": "Rating Home + Away",
     "rating_diff": "Rating Home − Away",
     "glicko_diff": "Rating Home − Away",
     "rating_ratio": "Rating Home ÷ Away",
-    "rating_sum": "Rating Home + Away",
-    "rating_avg": "(Rating Home + Away) ÷ 2",
-    "rating_home": "Rating Home",
-    "rating_away": "Rating Away",
-    "xg_glicko_diff": "xG Glicko Home − Away",
-    "xg_glicko_ratio": "xG Glicko Home ÷ Away",
-    "xg_glicko_sum": "xG Glicko Home + Away",
-    "glicko_xg": "xG Glicko Home + Away",
+    "glicko_rating": "Rating Ø (Home + Away) ÷ 2",
     "xg_glicko_home": "xG Glicko Home",
     "xg_glicko_away": "xG Glicko Away",
-    "xg_form2_diff": "xG Form2 Home − Away",
-    "xg_form2_ratio": "xG Form2 Home ÷ Away",
-    "xg_form2_sum": "xG Form2 Home + Away",
-    "xg_form2_home": "xG Form2 Home",
-    "xg_form2_away": "xG Form2 Away",
+    "xg_home_glicko": "xG Glicko Home",
+    "xg_away_glicko": "xG Glicko Away",
+    "xg_glicko_sum": "xG Glicko Home + Away",
+    "glicko_xg": "xG Glicko Home + Away",
+    "xg_glicko_diff": "xG Glicko Home − Away",
+    "xg_glicko_ratio": "xG Glicko Home ÷ Away",
+    "xg_form2_home": "xG Saison Home",
+    "xg_form2_away": "xG Saison Away",
+    "xg_form2_sum": "xG Saison Home + Away",
+    "xg_form2_diff": "xG Saison Home − Away",
+    "xg_form2_ratio": "xG Saison Home ÷ Away",
+    "hometeam_pred_xg": "xG Venue Home",
+    "awayteam_pred_xg": "xG Venue Away",
+    "form2_avg_xg_home": "Ø xG Home (Saison)",
+    "form2_avg_xg_away": "Ø xG Away (Saison)",
+    "form2_avg_xga_home": "Ø xGA Home (Saison)",
+    "form2_avg_xga_away": "Ø xGA Away (Saison)",
+    "form2_avg_gf_home": "Ø Tore Home (Saison)",
+    "form2_avg_gf_away": "Ø Tore Away (Saison)",
+    "form2_avg_ga_home": "Ø Gegentore Home (Saison)",
+    "form2_avg_ga_away": "Ø Gegentore Away (Saison)",
+    "hometeam_home_xg": "Ø xG Home (Heimspiele)",
+    "hometeam_home_xga": "Ø xGA Home (Heimspiele)",
+    "hometeam_home_gf": "Ø Tore Home (Heimspiele)",
+    "hometeam_home_ga": "Ø Gegentore Home (Heimspiele)",
+    "hometeam_away_xg": "Ø xG Home (Auswärtsspiele)",
+    "hometeam_away_xga": "Ø xGA Home (Auswärtsspiele)",
+    "hometeam_away_gf": "Ø Tore Home (Auswärtsspiele)",
+    "hometeam_away_ga": "Ø Gegentore Home (Auswärtsspiele)",
+    "awayteam_home_xg": "Ø xG Away (Heimspiele)",
+    "awayteam_home_xga": "Ø xGA Away (Heimspiele)",
+    "awayteam_home_gf": "Ø Tore Away (Heimspiele)",
+    "awayteam_home_ga": "Ø Gegentore Away (Heimspiele)",
+    "awayteam_away_xg": "Ø xG Away (Auswärtsspiele)",
+    "awayteam_away_xga": "Ø xGA Away (Auswärtsspiele)",
+    "awayteam_away_gf": "Ø Tore Away (Auswärtsspiele)",
+    "awayteam_away_ga": "Ø Gegentore Away (Auswärtsspiele)",
+    "xg_match_home": "xG Match Home",
+    "xg_match_away": "xG Match Away",
+    "xg_match_sum": "xG Match Home + Away",
     "xg_match_diff": "xG Match Home − Away",
     "xg_match_ratio": "xG Match Home ÷ Away",
-    "xg_match_sum": "xG Match Home + Away",
+    "rd_home": "Rating-Unsicherheit (RD) Home",
+    "rd_away": "Rating-Unsicherheit (RD) Away",
+    "vol_home": "Rating-Volatilität Home",
+    "vol_away": "Rating-Volatilität Away",
 }
+PERCENTILE_METRIC_LABELS.update(METRIC_DISPLAY_NAMES)
 
 
 def metric_expr(metric: str) -> str:
-    """Formel für Anzeige, z. B. rating_diff → „Rating Home − Away“; sonst der Metrik-Name."""
-    return METRIC_FORMULAS.get(metric, metric)
+    """Anzeige-Name/Formel, z. B. rating_diff → „Rating Home − Away“; sonst der Metrik-Name."""
+    return PERCENTILE_METRIC_LABELS.get(metric, metric)
 
 
 def _percentile_cut(sorted_vals: List[float], pct: float) -> Optional[float]:
@@ -1790,6 +1828,7 @@ def rank_metrics_influence(
             profit = m.get("total_profit") or 0.0
             ranked.append({
                 "metric": metric,
+                "metric_label": metric_expr(metric),
                 "rule": rule_label,
                 "condition": cond,
                 "threshold": thr,

@@ -23,6 +23,7 @@ import {
   deleteStrategyPreset,
   syncStrategyPresets,
 } from '../strategyPresetsStore'
+import { metricName, withMetricNames } from '../metricNames'
 import {
   ANALYSE_HELP_TITLE,
   CORR_COLUMN_MAP,
@@ -142,7 +143,7 @@ function activeFilterChips(filters) {
   return chips
 }
 
-const CMP_ATTRS = [
+const CMP_ATTRS = withMetricNames([
   { value: 'rating_home', label: 'homeRating' },
   { value: 'rating_away', label: 'awayRating' },
   { value: 'xg_home_glicko', label: 'xG Glicko Home' },
@@ -182,9 +183,9 @@ const CMP_ATTRS = [
   { value: 'awayteam_away_ga', label: 'awayteam_away_ga' },
   { value: 'hometeam_pred_xg', label: 'hometeam_pred_xg' },
   { value: 'awayteam_pred_xg', label: 'awayteam_pred_xg' },
-]
+])
 
-const PCT_METRICS = [
+const PCT_METRICS = withMetricNames([
   { value: 'chance', label: 'Chance (Modell)' },
   { value: 'glicko_rating', label: 'Ø Glicko Rating' },
   { value: 'rating_diff', label: 'Rating Diff (H−A)' },
@@ -217,7 +218,7 @@ const PCT_METRICS = [
   { value: 'odds', label: 'Quote' },
   { value: 'xroi_pct', label: 'xROI %' },
   { value: 'profit', label: 'Profit (Look-ahead!)' },
-]
+])
 
 const EMPTY_CMP = {
   attr1: 'xg_form2_home',
@@ -231,7 +232,7 @@ const MAX_XG_COMPARISONS = 4
 
 const PCT_VALUES = ['1', '5', '10', '15', '20', '25', '30', '50']
 
-const BUCKET_METRICS = [
+const BUCKET_METRICS = withMetricNames([
   { value: 'home_quote', label: 'Home-Quote' },
   { value: 'away_quote', label: 'Away-Quote' },
   { value: 'over_25_quote', label: 'Over 2.5 Quote' },
@@ -273,7 +274,7 @@ const BUCKET_METRICS = [
   { value: 'awayteam_pred_xg', label: 'awayteam_pred_xg' },
   { value: 'chance', label: 'Chance' },
   { value: 'xroi_pct', label: 'xROI %' },
-]
+])
 
 const DEFAULTS = {
   market_over: true,
@@ -1286,7 +1287,7 @@ export default function StrategyPage() {
                     <ul className="strat-opt-params">
                       {(optReport.best.params || []).map((p, i) => (
                         <li key={`${p.metric}-${i}`}>
-                          <code>{p.metric}</code> — {p.condition}
+                          <code title={p.metric}>{metricName(p.metric)}</code> — {p.condition}
                           <span className="muted"> ({p.rule})</span>
                         </li>
                       ))}
@@ -1475,7 +1476,7 @@ export default function StrategyPage() {
                                 }}
                               >
                                 <td className="num">{i + 1}</td>
-                                <td>{row.metric}</td>
+                                <td title={row.metric}>{metricName(row.metric)}</td>
                                 <td>{row.rule}</td>
                                 <td>{row.condition}</td>
                                 <td className="num">{num(row.n, 0)}</td>
