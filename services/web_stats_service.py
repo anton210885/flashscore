@@ -5,8 +5,10 @@ import json
 import os
 import re
 import sqlite3
+import threading
+import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_PATH = os.path.join(ROOT, "data", "flashscore.db")
@@ -27,9 +29,9 @@ def _pct(part: int, whole: int) -> float:
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    from database import connect
+
+    return connect(DB_PATH, foreign_keys=False)
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -107,214 +109,231 @@ def _parse_backfill_log(path: str, kind: str) -> Optional[Dict[str, Any]]:
     return out
 
 
+def _sum_buckets(rows: List[Dict[str, Any]], key) -> Dict[Any, Dict[str, int]]:
+    out: Dict[Any, Dict[str, int]] = {}
+    for r in rows:
+        b = out.setdefault(
+            key(r),
+            {"games": 0, "with_glicko": 0, "with_xg": 0, "with_closing": 0, "with_opening": 0},
+        )
+        for f in b:
+            b[f] += r[f]
+    return out
+
+
+def _db_coverage(conn: sqlite3.Connection, top_n: int) -> Dict[str, Any]:
+    """Alle DB-Kennzahlen mit einem Durchlauf über game_odds und einem über games."""
+    games = conn.execute("SELECT COUNT(*) FROM games").fetchone()[0]
+    glicko = conn.execute("SELECT COUNT(*) FROM game_glicko").fetchone()[0]
+    with_xg = conn.execute(
+        """
+        SELECT COUNT(*) FROM game_glicko
+        WHERE home_xg IS NOT NULL AND away_xg IS NOT NULL
+        """
+    ).fetchone()[0]
+    missing_glicko = max(0, games - glicko)
+
+    profits_games = 0
+    if _table_exists(conn, "game_profits"):
+        profits_games = conn.execute(
+            "SELECT COUNT(DISTINCT game_id) FROM game_profits"
+        ).fetchone()[0]
+
+    # Odds-Flags pro Spiel — ein Scan über game_odds liefert auch die Gesamtzahlen
+    conn.execute("DROP TABLE IF EXISTS _tmp_odds_flags")
+    conn.execute(
+        """
+        CREATE TEMP TABLE _tmp_odds_flags (
+            game_id INTEGER PRIMARY KEY,
+            has_closing INTEGER NOT NULL,
+            has_opening INTEGER NOT NULL
+        )
+        """
+    )
+    if _table_exists(conn, "game_odds"):
+        conn.execute(
+            """
+            INSERT INTO _tmp_odds_flags (game_id, has_closing, has_opening)
+            SELECT
+                game_id,
+                MAX(CASE WHEN value IS NOT NULL THEN 1 ELSE 0 END),
+                MAX(CASE WHEN opening_value IS NOT NULL AND opening_value > 0 THEN 1 ELSE 0 END)
+            FROM game_odds
+            WHERE game_id IS NOT NULL
+            GROUP BY game_id
+            """
+        )
+    odds_games, opening_games = conn.execute(
+        "SELECT COALESCE(SUM(has_closing), 0), COALESCE(SUM(has_opening), 0) FROM _tmp_odds_flags"
+    ).fetchone()
+
+    # Ein Aggregat auf Liga × Saison; Saison- und Liga-Sicht werden daraus summiert
+    ls_rows = [
+        {
+            "league_id": r[0],
+            "season_year": int(r[1]),
+            "games": int(r[2]),
+            "with_glicko": int(r[3] or 0),
+            "with_xg": int(r[4] or 0),
+            "with_closing": int(r[5] or 0),
+            "with_opening": int(r[6] or 0),
+        }
+        for r in conn.execute(
+            """
+            SELECT
+                g.league_id,
+                COALESCE(g.season_year, -1),
+                COUNT(*),
+                SUM(CASE WHEN gl.game_id IS NOT NULL THEN 1 ELSE 0 END),
+                SUM(CASE WHEN gl.home_xg IS NOT NULL AND gl.away_xg IS NOT NULL THEN 1 ELSE 0 END),
+                SUM(COALESCE(of.has_closing, 0)),
+                SUM(COALESCE(of.has_opening, 0))
+            FROM games g
+            LEFT JOIN game_glicko gl ON gl.game_id = g.id
+            LEFT JOIN _tmp_odds_flags of ON of.game_id = g.id
+            GROUP BY g.league_id, COALESCE(g.season_year, -1)
+            """
+        ).fetchall()
+    ]
+    conn.execute("DROP TABLE IF EXISTS _tmp_odds_flags")
+
+    names: Dict[Any, str] = {}
+    if _table_exists(conn, "leagues"):
+        names = {
+            r[0]: r[1]
+            for r in conn.execute("SELECT league_id, league_name FROM leagues").fetchall()
+            if r[1] is not None
+        }
+
+    def league_label(lid: Any) -> Optional[str]:
+        return names.get(lid) or (None if lid is None else str(lid))
+
+    # —— Abdeckung pro Season / Jahr ——
+    by_season: List[Dict[str, Any]] = []
+    seasons = _sum_buckets(ls_rows, lambda r: r["season_year"])
+    for yr in sorted(seasons, reverse=True):
+        b = seasons[yr]
+        gcount = b["games"]
+        by_season.append(
+            {
+                "season_year": None if yr < 0 else yr,
+                "label": "unbekannt" if yr < 0 else str(yr),
+                "games": gcount,
+                "with_glicko": b["with_glicko"],
+                "with_xg": b["with_xg"],
+                "with_closing": b["with_closing"],
+                "with_opening": b["with_opening"],
+                "glicko_pct": _pct(b["with_glicko"], gcount),
+                "xg_pct": _pct(b["with_xg"], gcount),
+                "closing_pct": _pct(b["with_closing"], gcount),
+                "opening_pct": _pct(b["with_opening"], gcount),
+            }
+        )
+
+    # —— Top Ligen: Glicko + Opening % ——
+    leagues = _sum_buckets(ls_rows, lambda r: r["league_id"])
+    top_ids = sorted(
+        leagues, key=lambda lid: leagues[lid]["games"] - leagues[lid]["with_glicko"], reverse=True
+    )[:top_n]
+    top_leagues: List[Dict[str, Any]] = []
+    for lid in top_ids:
+        b = leagues[lid]
+        gcount = b["games"]
+        top_leagues.append(
+            {
+                "league_id": lid,
+                "league": league_label(lid),
+                "games": gcount,
+                "with_glicko": b["with_glicko"],
+                "missing_glicko": gcount - b["with_glicko"],
+                "with_opening": b["with_opening"],
+                "coverage_pct": _pct(b["with_glicko"], gcount),
+                "opening_pct": _pct(b["with_opening"], gcount),
+            }
+        )
+
+    # —— Liga × Season (Top fehlendes Glicko) ——
+    missing_ls = sorted(
+        (r for r in ls_rows if r["games"] > r["with_glicko"]),
+        key=lambda r: r["games"] - r["with_glicko"],
+        reverse=True,
+    )[: top_n * 2]
+    by_league_season: List[Dict[str, Any]] = []
+    for r in missing_ls:
+        gcount = r["games"]
+        yr = r["season_year"]
+        by_league_season.append(
+            {
+                "league_id": r["league_id"],
+                "league": league_label(r["league_id"]),
+                "season_year": None if yr < 0 else yr,
+                "games": gcount,
+                "with_glicko": r["with_glicko"],
+                "missing_glicko": gcount - r["with_glicko"],
+                "with_opening": r["with_opening"],
+                "coverage_pct": _pct(r["with_glicko"], gcount),
+                "opening_pct": _pct(r["with_opening"], gcount),
+            }
+        )
+
+    return {
+        "coverage": {
+            "games": games,
+            "glicko": glicko,
+            "glicko_pct": _pct(glicko, games),
+            "xg": with_xg,
+            "xg_pct": _pct(with_xg, games),
+            "missing_glicko": missing_glicko,
+            "odds_games": odds_games,
+            "odds_pct": _pct(odds_games, games),
+            "opening_games": opening_games,
+            "opening_pct": _pct(opening_games, games),
+            "profits_games": profits_games,
+            "profits_pct": _pct(profits_games, games),
+        },
+        "by_season": by_season,
+        "top_missing_glicko": top_leagues,
+        "by_league_season": by_league_season,
+    }
+
+
+# Die Stats-Seite pollt alle 15 s; DB-Kennzahlen ändern sich langsam → kurz cachen.
+# Lock: parallele Polls warten auf eine Berechnung statt jede selbst zu starten.
+_COVERAGE_TTL_S = 120
+_coverage_cache: Dict[int, Tuple[float, str, Dict[str, Any]]] = {}
+_coverage_lock = threading.Lock()
+
+
+def _cached_coverage(top_n: int) -> Tuple[str, Dict[str, Any]]:
+    with _coverage_lock:
+        hit = _coverage_cache.get(top_n)
+        if hit and time.time() - hit[0] < _COVERAGE_TTL_S:
+            return hit[1], hit[2]
+        conn = _connect()
+        try:
+            data = _db_coverage(conn, top_n)
+        finally:
+            conn.close()
+        computed_at = datetime.now().isoformat(timespec="seconds")
+        _coverage_cache[top_n] = (time.time(), computed_at, data)
+        return computed_at, data
+
+
 def get_stats(top_n: int = 12) -> Dict[str, Any]:
     if not os.path.exists(DB_PATH):
         return {"ok": False, "error": "DB missing", "db": "data/flashscore.db"}
 
-    conn = _connect()
-    try:
-        games = conn.execute("SELECT COUNT(*) FROM games").fetchone()[0]
-        glicko = conn.execute("SELECT COUNT(*) FROM game_glicko").fetchone()[0]
-        with_xg = conn.execute(
-            """
-            SELECT COUNT(*) FROM game_glicko
-            WHERE home_xg IS NOT NULL AND away_xg IS NOT NULL
-            """
-        ).fetchone()[0]
-        missing_glicko = max(0, games - glicko)
-
-        odds_games = 0
-        opening_games = 0
-        if _table_exists(conn, "game_odds"):
-            odds_games = conn.execute(
-                "SELECT COUNT(DISTINCT game_id) FROM game_odds WHERE value IS NOT NULL"
-            ).fetchone()[0]
-            opening_games = conn.execute(
-                """
-                SELECT COUNT(DISTINCT game_id) FROM game_odds
-                WHERE opening_value IS NOT NULL AND opening_value > 0
-                """
-            ).fetchone()[0]
-
-        profits_games = 0
-        if _table_exists(conn, "game_profits"):
-            profits_games = conn.execute(
-                "SELECT COUNT(DISTINCT game_id) FROM game_profits"
-            ).fetchone()[0]
-
-        # Odds-Flags einmal voraggregieren (viel schneller als EXISTS pro Zeile)
-        conn.execute("DROP TABLE IF EXISTS _tmp_odds_flags")
-        conn.execute(
-            """
-            CREATE TEMP TABLE _tmp_odds_flags AS
-            SELECT
-                game_id,
-                MAX(CASE WHEN value IS NOT NULL THEN 1 ELSE 0 END) AS has_closing,
-                MAX(CASE WHEN opening_value IS NOT NULL AND opening_value > 0 THEN 1 ELSE 0 END) AS has_opening
-            FROM game_odds
-            GROUP BY game_id
-            """
-        )
-
-        has_leagues = _table_exists(conn, "leagues")
-        league_join = (
-            "LEFT JOIN leagues l ON l.league_id = g.league_id" if has_leagues else ""
-        )
-        league_name = (
-            "COALESCE(l.league_name, CAST(g.league_id AS TEXT))"
-            if has_leagues
-            else "CAST(g.league_id AS TEXT)"
-        )
-
-        # —— Abdeckung pro Season / Jahr ——
-        by_season: List[Dict[str, Any]] = []
-        season_rows = conn.execute(
-            """
-            SELECT
-                COALESCE(g.season_year, -1) AS season_year,
-                COUNT(*) AS games,
-                SUM(CASE WHEN gl.game_id IS NOT NULL THEN 1 ELSE 0 END) AS with_glicko,
-                SUM(CASE WHEN gl.home_xg IS NOT NULL AND gl.away_xg IS NOT NULL THEN 1 ELSE 0 END) AS with_xg,
-                SUM(COALESCE(of.has_closing, 0)) AS with_closing,
-                SUM(COALESCE(of.has_opening, 0)) AS with_opening
-            FROM games g
-            LEFT JOIN game_glicko gl ON gl.game_id = g.id
-            LEFT JOIN _tmp_odds_flags of ON of.game_id = g.id
-            GROUP BY COALESCE(g.season_year, -1)
-            ORDER BY season_year DESC
-            """
-        ).fetchall()
-        for r in season_rows:
-            gcount = int(r["games"])
-            wg = int(r["with_glicko"] or 0)
-            wx = int(r["with_xg"] or 0)
-            wc = int(r["with_closing"] or 0)
-            wo = int(r["with_opening"] or 0)
-            yr = int(r["season_year"])
-            by_season.append(
-                {
-                    "season_year": None if yr < 0 else yr,
-                    "label": "unbekannt" if yr < 0 else str(yr),
-                    "games": gcount,
-                    "with_glicko": wg,
-                    "with_xg": wx,
-                    "with_closing": wc,
-                    "with_opening": wo,
-                    "glicko_pct": _pct(wg, gcount),
-                    "xg_pct": _pct(wx, gcount),
-                    "closing_pct": _pct(wc, gcount),
-                    "opening_pct": _pct(wo, gcount),
-                }
-            )
-
-        # —— Top Ligen: Glicko + Opening % ——
-        top_leagues: List[Dict[str, Any]] = []
-        rows = conn.execute(
-            f"""
-            SELECT
-                g.league_id AS league_id,
-                {league_name} AS league,
-                COUNT(*) AS games,
-                SUM(CASE WHEN gl.game_id IS NOT NULL THEN 1 ELSE 0 END) AS with_glicko,
-                SUM(CASE WHEN gl.game_id IS NULL THEN 1 ELSE 0 END) AS missing_glicko,
-                SUM(COALESCE(of.has_opening, 0)) AS with_opening
-            FROM games g
-            LEFT JOIN game_glicko gl ON gl.game_id = g.id
-            LEFT JOIN _tmp_odds_flags of ON of.game_id = g.id
-            {league_join}
-            GROUP BY g.league_id
-            ORDER BY missing_glicko DESC
-            LIMIT ?
-            """,
-            (top_n,),
-        ).fetchall()
-        for r in rows:
-            gcount = int(r["games"])
-            wg = int(r["with_glicko"] or 0)
-            wo = int(r["with_opening"] or 0)
-            miss = int(r["missing_glicko"] or 0)
-            top_leagues.append(
-                {
-                    "league_id": r["league_id"],
-                    "league": r["league"],
-                    "games": gcount,
-                    "with_glicko": wg,
-                    "missing_glicko": miss,
-                    "with_opening": wo,
-                    "coverage_pct": _pct(wg, gcount),
-                    "opening_pct": _pct(wo, gcount),
-                }
-            )
-
-        # —— Liga × Season (Top fehlendes Glicko) ——
-        by_league_season: List[Dict[str, Any]] = []
-        ls_rows = conn.execute(
-            f"""
-            SELECT
-                g.league_id AS league_id,
-                {league_name} AS league,
-                COALESCE(g.season_year, -1) AS season_year,
-                COUNT(*) AS games,
-                SUM(CASE WHEN gl.game_id IS NOT NULL THEN 1 ELSE 0 END) AS with_glicko,
-                SUM(CASE WHEN gl.game_id IS NULL THEN 1 ELSE 0 END) AS missing_glicko,
-                SUM(COALESCE(of.has_opening, 0)) AS with_opening
-            FROM games g
-            LEFT JOIN game_glicko gl ON gl.game_id = g.id
-            LEFT JOIN _tmp_odds_flags of ON of.game_id = g.id
-            {league_join}
-            GROUP BY g.league_id, COALESCE(g.season_year, -1)
-            HAVING missing_glicko > 0
-            ORDER BY missing_glicko DESC
-            LIMIT ?
-            """,
-            (top_n * 2,),
-        ).fetchall()
-        for r in ls_rows:
-            gcount = int(r["games"])
-            wg = int(r["with_glicko"] or 0)
-            yr = int(r["season_year"])
-            by_league_season.append(
-                {
-                    "league_id": r["league_id"],
-                    "league": r["league"],
-                    "season_year": None if yr < 0 else yr,
-                    "games": gcount,
-                    "with_glicko": wg,
-                    "missing_glicko": int(r["missing_glicko"] or 0),
-                    "with_opening": int(r["with_opening"] or 0),
-                    "coverage_pct": _pct(wg, gcount),
-                    "opening_pct": _pct(int(r["with_opening"] or 0), gcount),
-                }
-            )
-
-        db_size_mb = round(os.path.getsize(DB_PATH) / (1024 * 1024), 1)
-
-        return {
-            "ok": True,
-            "generated_at": datetime.now().isoformat(timespec="seconds"),
-            "db": "data/flashscore.db",
-            "db_size_mb": db_size_mb,
-            "coverage": {
-                "games": games,
-                "glicko": glicko,
-                "glicko_pct": _pct(glicko, games),
-                "xg": with_xg,
-                "xg_pct": _pct(with_xg, games),
-                "missing_glicko": missing_glicko,
-                "odds_games": odds_games,
-                "odds_pct": _pct(odds_games, games),
-                "opening_games": opening_games,
-                "opening_pct": _pct(opening_games, games),
-                "profits_games": profits_games,
-                "profits_pct": _pct(profits_games, games),
-            },
-            "by_season": by_season,
-            "top_missing_glicko": top_leagues,
-            "by_league_season": by_league_season,
-            "backfill": _parse_backfill_log(LOG_GLICKO, "glicko"),
-            "backfill_opening": _parse_backfill_log(LOG_OPENING, "opening"),
-            "backfill_closing": _parse_backfill_log(LOG_CLOSING, "closing"),
-            "live_pipeline": _read_pipeline_status(),
-        }
-    finally:
-        conn.close()
+    computed_at, coverage = _cached_coverage(top_n)
+    return {
+        "ok": True,
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "coverage_computed_at": computed_at,
+        "db": "data/flashscore.db",
+        "db_size_mb": round(os.path.getsize(DB_PATH) / (1024 * 1024), 1),
+        **coverage,
+        # Logs + Pipeline-Status bleiben bei jedem Poll aktuell
+        "backfill": _parse_backfill_log(LOG_GLICKO, "glicko"),
+        "backfill_opening": _parse_backfill_log(LOG_OPENING, "opening"),
+        "backfill_closing": _parse_backfill_log(LOG_CLOSING, "closing"),
+        "live_pipeline": _read_pipeline_status(),
+    }

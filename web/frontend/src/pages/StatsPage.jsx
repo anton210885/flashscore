@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 
 function fmt(n) {
@@ -131,14 +131,22 @@ export default function StatsPage() {
   const [loading, setLoading] = useState(false)
   const [auto, setAuto] = useState(true)
 
+  const inFlight = useRef(false)
+
   const load = useCallback(() => {
+    // Auto-Refresh nicht stapeln, solange die vorige Anfrage noch läuft
+    if (inFlight.current) return
+    inFlight.current = true
     setLoading(true)
     setError('')
     api
       .stats()
       .then(setData)
       .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
+      .finally(() => {
+        inFlight.current = false
+        setLoading(false)
+      })
   }, [])
 
   useEffect(() => {
