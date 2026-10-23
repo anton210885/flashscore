@@ -11,14 +11,10 @@ DB_PATH = "data/flashscore.db"
 
 
 def _conn() -> sqlite3.Connection:
-    c = sqlite3.connect(DB_PATH)
-    c.row_factory = sqlite3.Row
-    try:
-        from services.form2_service import ensure_form2_schema
-        ensure_form2_schema(c)
-    except Exception:
-        pass
-    return c
+    # Schema inkl. Form2 richtet connect() einmal pro Prozess ein
+    from database import connect
+
+    return connect(DB_PATH, foreign_keys=False)
 
 
 def _fnum(v: Any) -> Optional[float]:

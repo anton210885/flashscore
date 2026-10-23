@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from database import DatabaseManager
+from database import connect
 from services.match_status import FINISHED_STATUS_CODES
 
 DB_PATH = "data/flashscore.db"
@@ -13,13 +13,7 @@ PINNACLE_BOOKMAKER_ID = 4
 
 
 def _conn() -> sqlite3.Connection:
-    c = DatabaseManager(DB_PATH).get_connection()
-    c.row_factory = sqlite3.Row
-    try:
-        c.execute("PRAGMA busy_timeout = 15000")
-    except Exception:
-        pass
-    return c
+    return connect(DB_PATH)
 
 
 def classify_status(status: Any, status_name: Any) -> str:

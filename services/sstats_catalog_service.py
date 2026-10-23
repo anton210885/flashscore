@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from config import config as cfg
 from api.sstats_client import SStatsClient
-from database import DatabaseManager
+from database import connect
 
 DB_PATH = "data/flashscore.db"
 
@@ -199,8 +199,7 @@ def _nested_get(obj: Any, path: str) -> Any:
 
 def _pick_sample_game_id() -> Optional[int]:
     try:
-        conn = DatabaseManager(DB_PATH).get_connection()
-        conn.row_factory = sqlite3.Row
+        conn = connect(DB_PATH)
         row = conn.execute(
             """
             SELECT id FROM games

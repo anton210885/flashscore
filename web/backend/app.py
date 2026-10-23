@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
+from database import ensure_schema
 from services import web_league_service as svc
 from services import sstats_catalog_service as catalog_svc
 from services import web_games_service as games_svc
@@ -31,6 +32,8 @@ from services.pipeline_autostart import (
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # DB-Schema einmal beim Start einrichten — Requests öffnen danach nur noch Verbindungen
+    ensure_schema(os.path.join(ROOT, "data", "flashscore.db"))
     # Meisterschaften/Upcoming/Odds/Form2 automatisch laden, solange API läuft
     info = start_background_pipeline()
     print(f"[api] live-pipeline: {info}", flush=True)

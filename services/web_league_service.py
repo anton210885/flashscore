@@ -48,16 +48,9 @@ LEAGUE_NAME_FIXES = {
 
 
 def _conn() -> sqlite3.Connection:
-    from database import DatabaseManager
+    from database import connect
 
-    db = DatabaseManager(DB_PATH)
-    c = db.get_connection()
-    c.row_factory = sqlite3.Row
-    try:
-        c.execute("PRAGMA busy_timeout = 15000")
-    except Exception:
-        pass
-    return c
+    return connect(DB_PATH)
 
 
 def _pct(count: int, total: int) -> str:
