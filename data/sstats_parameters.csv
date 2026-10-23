@@ -1,0 +1,135 @@
+group,subgroup,key,label,when,desc,sample
+glicko,,homeRating,Home Glicko Rating,pre,Glicko-2 Stärke Home vor dem Spiel,
+glicko,,awayRating,Away Glicko Rating,pre,Glicko-2 Stärke Away vor dem Spiel,
+glicko,,homeRd,Home RD,pre,Rating Deviation Home (Unsicherheit),
+glicko,,awayRd,Away RD,pre,Rating Deviation Away,
+glicko,,homeVolatility,Home Volatility,pre,Volatilität Home,
+glicko,,awayVolatility,Away Volatility,pre,Volatilität Away,
+glicko,,homeXg,Home xG (Modell),pre,Erwartete Tore Home laut Glicko-Modell (nicht Match-xG),
+glicko,,awayXg,Away xG (Modell),pre,Erwartete Tore Away laut Glicko-Modell,
+glicko,,homeWinProbability,P(Home Win),pre,Siegwahrscheinlichkeit Home,
+glicko,,awayWinProbability,P(Away Win),pre,Siegwahrscheinlichkeit Away,
+glicko,,drawProbability,P(Draw) berechnet,pre,1 − homeWin − awayWin (lokal berechnet),
+glicko,,updated,Updated,pre,Update-Zeitstempel vom Modell,
+game,,id,Game ID,both,SStats Match-ID,1577596
+game,,flashId,Flashscore ID,both,Flashscore-Referenz,
+game,,date,Kickoff,both,Anstoßzeit (ISO),2026-11-25T16:00:00+00:00
+game,,dateUtc,Kickoff UTC,both,Unix-Timestamp,1795622400
+game,,status,Status Code,both,z.B. 8 = Finished,2
+game,,statusName,Status Name,both,Finished / 1st Half / …,Not Started
+game,,elapsed,Spielminute,live,Aktuelle Minute,
+game,,extraMinutes,Nachspielzeit,live,Extra Minuten,
+game,,homeResult,Home Result,post,Aktueller Stand Home,
+game,,awayResult,Away Result,post,Aktueller Stand Away,
+game,,homeHTResult,Home HT,post,Halbzeit Home,
+game,,awayHTResult,Away HT,post,Halbzeit Away,
+game,,homeFTResult,Home FT,post,Endstand Home,
+game,,awayFTResult,Away FT,post,Endstand Away,
+game,,roundName,Runde,both,Spieltag / Runde,Regular Season - 19
+game,,homeTeam.id,Home Team ID,both,Team-ID Home,6811
+game,,homeTeam.name,Home Team,both,Teamname Home,Leningradets
+game,,awayTeam.id,Away Team ID,both,Team-ID Away,1087
+game,,awayTeam.name,Away Team,both,Teamname Away,Ska-khabarovsk
+game,,season.year,Saisonjahr,both,season_year,2026
+game,,season.league.id,Liga ID,both,league_id,236
+game,,season.league.name,Liga,both,Liganame,First League
+statistics,xg,expectedGoalsHome,Match-xG (Shot-basiert) (Home),post,Match-Statistik Match-xG (Shot-basiert) – Home,
+statistics,xg,expectedGoalsAway,Match-xG (Shot-basiert) (Away),post,Match-Statistik Match-xG (Shot-basiert) – Away,
+statistics,xg,calculatedXgHome,Berechnetes xG (oft null) (Home),post,Match-Statistik Berechnetes xG (oft null) – Home,
+statistics,xg,calculatedXgAway,Berechnetes xG (oft null) (Away),post,Match-Statistik Berechnetes xG (oft null) – Away,
+statistics,xg,xgOnTargetHome,xG on Target (xGOT) (Home),post,Match-Statistik xG on Target (xGOT) – Home,
+statistics,xg,xgOnTargetAway,xG on Target (xGOT) (Away),post,Match-Statistik xG on Target (xGOT) – Away,
+statistics,xg,xgotFacedHome,xGOT faced (Torwart) (Home),post,Match-Statistik xGOT faced (Torwart) – Home,
+statistics,xg,xgotFacedAway,xGOT faced (Torwart) (Away),post,Match-Statistik xGOT faced (Torwart) – Away,
+statistics,xg,goalsPreventedHome,Goals Prevented (Home),post,Match-Statistik Goals Prevented – Home,
+statistics,xg,goalsPreventedAway,Goals Prevented (Away),post,Match-Statistik Goals Prevented – Away,
+statistics,xg,expectedAssistsHome,Expected Assists (xA) (Home),post,Match-Statistik Expected Assists (xA) – Home,
+statistics,xg,expectedAssistsAway,Expected Assists (xA) (Away),post,Match-Statistik Expected Assists (xA) – Away,
+statistics,xg,bigChancesHome,Große Chancen (Home),post,Match-Statistik Große Chancen – Home,
+statistics,xg,bigChancesAway,Große Chancen (Away),post,Match-Statistik Große Chancen – Away,
+statistics,shots,totalShotsHome,Schüsse gesamt (Home),post,Match-Statistik Schüsse gesamt – Home,9
+statistics,shots,totalShotsAway,Schüsse gesamt (Away),post,Match-Statistik Schüsse gesamt – Away,8
+statistics,shots,shotsOnGoalHome,Torschüsse (Home),post,Match-Statistik Torschüsse – Home,4
+statistics,shots,shotsOnGoalAway,Torschüsse (Away),post,Match-Statistik Torschüsse – Away,3
+statistics,shots,shotsOffGoalHome,Schüsse daneben (Home),post,Match-Statistik Schüsse daneben – Home,5
+statistics,shots,shotsOffGoalAway,Schüsse daneben (Away),post,Match-Statistik Schüsse daneben – Away,5
+statistics,shots,shotsInsideBoxHome,Schüsse im Strafraum (Home),post,Match-Statistik Schüsse im Strafraum – Home,
+statistics,shots,shotsInsideBoxAway,Schüsse im Strafraum (Away),post,Match-Statistik Schüsse im Strafraum – Away,
+statistics,shots,shotsOutsideBoxHome,Schüsse außerhalb (Home),post,Match-Statistik Schüsse außerhalb – Home,
+statistics,shots,shotsOutsideBoxAway,Schüsse außerhalb (Away),post,Match-Statistik Schüsse außerhalb – Away,
+statistics,shots,blockedShotsHome,Geblockte Schüsse (Home),post,Match-Statistik Geblockte Schüsse – Home,0
+statistics,shots,blockedShotsAway,Geblockte Schüsse (Away),post,Match-Statistik Geblockte Schüsse – Away,0
+statistics,possession,ballPossessionHome,Ballbesitz % (Home),post,Match-Statistik Ballbesitz % – Home,51
+statistics,possession,ballPossessionAway,Ballbesitz % (Away),post,Match-Statistik Ballbesitz % – Away,49
+statistics,attacks,attacksHome,Angriffe (Home),post,Match-Statistik Angriffe – Home,
+statistics,attacks,attacksAway,Angriffe (Away),post,Match-Statistik Angriffe – Away,
+statistics,attacks,dangerousAttacksHome,Gefährliche Angriffe (Home),post,Match-Statistik Gefährliche Angriffe – Home,
+statistics,attacks,dangerousAttacksAway,Gefährliche Angriffe (Away),post,Match-Statistik Gefährliche Angriffe – Away,
+statistics,passing,totalPassesHome,Pässe gesamt (Home),post,Match-Statistik Pässe gesamt – Home,
+statistics,passing,totalPassesAway,Pässe gesamt (Away),post,Match-Statistik Pässe gesamt – Away,
+statistics,passing,passesAccurateHome,Angekommene Pässe (Home),post,Match-Statistik Angekommene Pässe – Home,
+statistics,passing,passesAccurateAway,Angekommene Pässe (Away),post,Match-Statistik Angekommene Pässe – Away,
+statistics,passing,passesInFinalThirdHome,Pässe im letzten Drittel (Home),post,Match-Statistik Pässe im letzten Drittel – Home,
+statistics,passing,passesInFinalThirdAway,Pässe im letzten Drittel (Away),post,Match-Statistik Pässe im letzten Drittel – Away,
+statistics,passing,accurateThroughPassesHome,Steilpässe angekommen (Home),post,Match-Statistik Steilpässe angekommen – Home,
+statistics,passing,accurateThroughPassesAway,Steilpässe angekommen (Away),post,Match-Statistik Steilpässe angekommen – Away,
+statistics,passing,longPassesHome,Lange Bälle (Home),post,Match-Statistik Lange Bälle – Home,
+statistics,passing,longPassesAway,Lange Bälle (Away),post,Match-Statistik Lange Bälle – Away,
+statistics,passing,crossesHome,Flanken (Home),post,Match-Statistik Flanken – Home,
+statistics,passing,crossesAway,Flanken (Away),post,Match-Statistik Flanken – Away,
+statistics,passing,crossesCompletedHome,Flanken angekommen (Home),post,Match-Statistik Flanken angekommen – Home,
+statistics,passing,crossesCompletedAway,Flanken angekommen (Away),post,Match-Statistik Flanken angekommen – Away,
+statistics,defense,totalTacklesHome,Tackles (Home),post,Match-Statistik Tackles – Home,
+statistics,defense,totalTacklesAway,Tackles (Away),post,Match-Statistik Tackles – Away,
+statistics,defense,successTacklesHome,Erfolgreiche Tackles (Home),post,Match-Statistik Erfolgreiche Tackles – Home,
+statistics,defense,successTacklesAway,Erfolgreiche Tackles (Away),post,Match-Statistik Erfolgreiche Tackles – Away,
+statistics,defense,interceptionsHome,Abfangaktionen (Home),post,Match-Statistik Abfangaktionen – Home,
+statistics,defense,interceptionsAway,Abfangaktionen (Away),post,Match-Statistik Abfangaktionen – Away,
+statistics,defense,clearancesHome,Klärungsaktionen (Home),post,Match-Statistik Klärungsaktionen – Home,
+statistics,defense,clearancesAway,Klärungsaktionen (Away),post,Match-Statistik Klärungsaktionen – Away,
+statistics,defense,clearancesCompletedHome,Klärungen erfolgreich (Home),post,Match-Statistik Klärungen erfolgreich – Home,
+statistics,defense,clearancesCompletedAway,Klärungen erfolgreich (Away),post,Match-Statistik Klärungen erfolgreich – Away,
+statistics,defense,duelsWonHome,Zweikämpfe gewonnen (Home),post,Match-Statistik Zweikämpfe gewonnen – Home,
+statistics,defense,duelsWonAway,Zweikämpfe gewonnen (Away),post,Match-Statistik Zweikämpfe gewonnen – Away,
+statistics,defense,goalkeeperSavesHome,Paraden (Home),post,Match-Statistik Paraden – Home,
+statistics,defense,goalkeeperSavesAway,Paraden (Away),post,Match-Statistik Paraden – Away,
+statistics,setpieces,cornerKicksHome,Ecken (Home),post,Match-Statistik Ecken – Home,9
+statistics,setpieces,cornerKicksAway,Ecken (Away),post,Match-Statistik Ecken – Away,6
+statistics,setpieces,freeKicksHome,Freistöße (Home),post,Match-Statistik Freistöße – Home,
+statistics,setpieces,freeKicksAway,Freistöße (Away),post,Match-Statistik Freistöße – Away,
+statistics,setpieces,throwinsHome,Einwürfe (Home),post,Match-Statistik Einwürfe – Home,
+statistics,setpieces,throwinsAway,Einwürfe (Away),post,Match-Statistik Einwürfe – Away,
+statistics,discipline,foulsHome,Fouls (Home),post,Match-Statistik Fouls – Home,
+statistics,discipline,foulsAway,Fouls (Away),post,Match-Statistik Fouls – Away,
+statistics,discipline,yellowCardsHome,Gelbe Karten (Home),post,Match-Statistik Gelbe Karten – Home,1
+statistics,discipline,yellowCardsAway,Gelbe Karten (Away),post,Match-Statistik Gelbe Karten – Away,1
+statistics,discipline,redCardsHome,Rote Karten (Home),post,Match-Statistik Rote Karten – Home,0
+statistics,discipline,redCardsAway,Rote Karten (Away),post,Match-Statistik Rote Karten – Away,0
+statistics,discipline,offsidesHome,Abseits (Home),post,Match-Statistik Abseits – Home,
+statistics,discipline,offsidesAway,Abseits (Away),post,Match-Statistik Abseits – Away,
+statistics,goals,headedGoalsHome,Kopftore (Home),post,Match-Statistik Kopftore – Home,
+statistics,goals,headedGoalsAway,Kopftore (Away),post,Match-Statistik Kopftore – Away,
+statistics,shots,hitTheWoodworkHome,Holz (Home),post,Match-Statistik Holz – Home,
+statistics,shots,hitTheWoodworkAway,Holz (Away),post,Match-Statistik Holz – Away,
+statistics,errors,errorsLeadingToShotHome,Fehler → Schuss (Home),post,Match-Statistik Fehler → Schuss – Home,
+statistics,errors,errorsLeadingToShotAway,Fehler → Schuss (Away),post,Match-Statistik Fehler → Schuss – Away,
+statistics,errors,errorsLeadingToGoalHome,Fehler → Tor (Home),post,Match-Statistik Fehler → Tor – Home,
+statistics,errors,errorsLeadingToGoalAway,Fehler → Tor (Away),post,Match-Statistik Fehler → Tor – Away,
+statistics,attacks,touchesInOppositionBoxHome,Touches im gegn. Strafraum (Home),post,Match-Statistik Touches im gegn. Strafraum – Home,
+statistics,attacks,touchesInOppositionBoxAway,Touches im gegn. Strafraum (Away),post,Match-Statistik Touches im gegn. Strafraum – Away,
+statistics,physical,distanceCoveredHome,Laufleistung (Home),post,Match-Statistik Laufleistung – Home,
+statistics,physical,distanceCoveredAway,Laufleistung (Away),post,Match-Statistik Laufleistung – Away,
+odds,,bookmakerId,Bookie ID,both,Buchmacher-ID,
+odds,,bookmakerName,Bookie,both,Buchmacher-Name,
+odds,,marketId,Market ID,both,Markt-ID,
+odds,,marketName,Market,both,"z.B. Match Winner, Goals Over/Under, BTTS",
+odds,,odds[].name,Outcome,both,Home/Draw/Away/Over…,
+odds,,odds[].value,Quote,both,Dezimalquote,
+odds,,opening,Opening-Flag,pre,Query ?opening=true für Eröffnungsquoten,
+profits,,home|away|…,Team-Scope,post,home / away / homeFirstHalf / awayFirstHalf / …,
+profits,,market,Market,post,z.B. Match Winner,
+profits,,outcomes[].name,Outcome,post,Win/Draw/Lose…,
+profits,,outcomes[].profit,Profit,post,Kumulativer Profit über Historie,
+profits,,outcomes[].gamesCount,Spiele,post,Anzahl Spiele,
+profits,,outcomes[].winCount,Treffer,post,Gewonnene Wetten,
+profits,,outcomes[].profitHistory,Profit-Verlauf,post,Array der Profit-Kurve,

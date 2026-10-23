@@ -1,0 +1,1323 @@
+{
+  "base_url": "https://api.sstats.net",
+  "generated_at": "2026-10-10T09:40:56",
+  "endpoints": [
+    {
+      "path": "/games/list",
+      "method": "GET",
+      "desc": "Spiele-Liste (Filter: Liga, Datum, Status, …)",
+      "auth": "apikey Query"
+    },
+    {
+      "path": "/Games/{id}",
+      "method": "GET",
+      "desc": "Spiel-Detail: game + statistics + lineups + events",
+      "auth": "Bearer / apikey"
+    },
+    {
+      "path": "/games/glicko/{id}",
+      "method": "GET",
+      "desc": "Pre-Match Glicko Rating, Modell-xG, Win-Probabilities",
+      "auth": "apikey Query"
+    },
+    {
+      "path": "/Odds/{id}",
+      "method": "GET",
+      "desc": "Quoten je Bookmaker (?opening=true für Opening)",
+      "auth": "apikey Query"
+    },
+    {
+      "path": "/Games/profits",
+      "method": "GET",
+      "desc": "Historische Profitabilität der Teams",
+      "auth": "apikey Query"
+    }
+  ],
+  "groups": [
+    {
+      "id": "glicko",
+      "title": "Glicko (vor dem Spiel)",
+      "count": 12
+    },
+    {
+      "id": "game",
+      "title": "Spiel-Grunddaten",
+      "count": 22
+    },
+    {
+      "id": "statistics",
+      "title": "Match-Statistiken / xG",
+      "count": 86
+    },
+    {
+      "id": "odds",
+      "title": "Quoten",
+      "count": 7
+    },
+    {
+      "id": "profits",
+      "title": "Profits",
+      "count": 7
+    }
+  ],
+  "fields": [
+    {
+      "key": "homeRating",
+      "label": "Home Glicko Rating",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "Glicko-2 Stärke Home vor dem Spiel",
+      "sample": null
+    },
+    {
+      "key": "awayRating",
+      "label": "Away Glicko Rating",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "Glicko-2 Stärke Away vor dem Spiel",
+      "sample": null
+    },
+    {
+      "key": "homeRd",
+      "label": "Home RD",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "Rating Deviation Home (Unsicherheit)",
+      "sample": null
+    },
+    {
+      "key": "awayRd",
+      "label": "Away RD",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "Rating Deviation Away",
+      "sample": null
+    },
+    {
+      "key": "homeVolatility",
+      "label": "Home Volatility",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "Volatilität Home",
+      "sample": null
+    },
+    {
+      "key": "awayVolatility",
+      "label": "Away Volatility",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "Volatilität Away",
+      "sample": null
+    },
+    {
+      "key": "homeXg",
+      "label": "Home xG (Modell)",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "Erwartete Tore Home laut Glicko-Modell (nicht Match-xG)",
+      "sample": null
+    },
+    {
+      "key": "awayXg",
+      "label": "Away xG (Modell)",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "Erwartete Tore Away laut Glicko-Modell",
+      "sample": null
+    },
+    {
+      "key": "homeWinProbability",
+      "label": "P(Home Win)",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "Siegwahrscheinlichkeit Home",
+      "sample": null
+    },
+    {
+      "key": "awayWinProbability",
+      "label": "P(Away Win)",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "Siegwahrscheinlichkeit Away",
+      "sample": null
+    },
+    {
+      "key": "drawProbability",
+      "label": "P(Draw) berechnet",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "1 − homeWin − awayWin (lokal berechnet)",
+      "sample": null
+    },
+    {
+      "key": "updated",
+      "label": "Updated",
+      "when": "pre",
+      "group": "glicko",
+      "desc": "Update-Zeitstempel vom Modell",
+      "sample": null
+    },
+    {
+      "key": "id",
+      "label": "Game ID",
+      "when": "both",
+      "group": "game",
+      "desc": "SStats Match-ID",
+      "sample": 1577596
+    },
+    {
+      "key": "flashId",
+      "label": "Flashscore ID",
+      "when": "both",
+      "group": "game",
+      "desc": "Flashscore-Referenz",
+      "sample": null
+    },
+    {
+      "key": "date",
+      "label": "Kickoff",
+      "when": "both",
+      "group": "game",
+      "desc": "Anstoßzeit (ISO)",
+      "sample": "2026-11-25T16:00:00+00:00"
+    },
+    {
+      "key": "dateUtc",
+      "label": "Kickoff UTC",
+      "when": "both",
+      "group": "game",
+      "desc": "Unix-Timestamp",
+      "sample": 1795622400
+    },
+    {
+      "key": "status",
+      "label": "Status Code",
+      "when": "both",
+      "group": "game",
+      "desc": "z.B. 8 = Finished",
+      "sample": 2
+    },
+    {
+      "key": "statusName",
+      "label": "Status Name",
+      "when": "both",
+      "group": "game",
+      "desc": "Finished / 1st Half / …",
+      "sample": "Not Started"
+    },
+    {
+      "key": "elapsed",
+      "label": "Spielminute",
+      "when": "live",
+      "group": "game",
+      "desc": "Aktuelle Minute",
+      "sample": null
+    },
+    {
+      "key": "extraMinutes",
+      "label": "Nachspielzeit",
+      "when": "live",
+      "group": "game",
+      "desc": "Extra Minuten",
+      "sample": null
+    },
+    {
+      "key": "homeResult",
+      "label": "Home Result",
+      "when": "post",
+      "group": "game",
+      "desc": "Aktueller Stand Home",
+      "sample": null
+    },
+    {
+      "key": "awayResult",
+      "label": "Away Result",
+      "when": "post",
+      "group": "game",
+      "desc": "Aktueller Stand Away",
+      "sample": null
+    },
+    {
+      "key": "homeHTResult",
+      "label": "Home HT",
+      "when": "post",
+      "group": "game",
+      "desc": "Halbzeit Home",
+      "sample": null
+    },
+    {
+      "key": "awayHTResult",
+      "label": "Away HT",
+      "when": "post",
+      "group": "game",
+      "desc": "Halbzeit Away",
+      "sample": null
+    },
+    {
+      "key": "homeFTResult",
+      "label": "Home FT",
+      "when": "post",
+      "group": "game",
+      "desc": "Endstand Home",
+      "sample": null
+    },
+    {
+      "key": "awayFTResult",
+      "label": "Away FT",
+      "when": "post",
+      "group": "game",
+      "desc": "Endstand Away",
+      "sample": null
+    },
+    {
+      "key": "roundName",
+      "label": "Runde",
+      "when": "both",
+      "group": "game",
+      "desc": "Spieltag / Runde",
+      "sample": "Regular Season - 19"
+    },
+    {
+      "key": "homeTeam.id",
+      "label": "Home Team ID",
+      "when": "both",
+      "group": "game",
+      "desc": "Team-ID Home",
+      "sample": 6811
+    },
+    {
+      "key": "homeTeam.name",
+      "label": "Home Team",
+      "when": "both",
+      "group": "game",
+      "desc": "Teamname Home",
+      "sample": "Leningradets"
+    },
+    {
+      "key": "awayTeam.id",
+      "label": "Away Team ID",
+      "when": "both",
+      "group": "game",
+      "desc": "Team-ID Away",
+      "sample": 1087
+    },
+    {
+      "key": "awayTeam.name",
+      "label": "Away Team",
+      "when": "both",
+      "group": "game",
+      "desc": "Teamname Away",
+      "sample": "Ska-khabarovsk"
+    },
+    {
+      "key": "season.year",
+      "label": "Saisonjahr",
+      "when": "both",
+      "group": "game",
+      "desc": "season_year",
+      "sample": 2026
+    },
+    {
+      "key": "season.league.id",
+      "label": "Liga ID",
+      "when": "both",
+      "group": "game",
+      "desc": "league_id",
+      "sample": 236
+    },
+    {
+      "key": "season.league.name",
+      "label": "Liga",
+      "when": "both",
+      "group": "game",
+      "desc": "Liganame",
+      "sample": "First League"
+    },
+    {
+      "key": "expectedGoalsHome",
+      "label": "Match-xG (Shot-basiert) (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik Match-xG (Shot-basiert) – Home",
+      "sample": null
+    },
+    {
+      "key": "expectedGoalsAway",
+      "label": "Match-xG (Shot-basiert) (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik Match-xG (Shot-basiert) – Away",
+      "sample": null
+    },
+    {
+      "key": "calculatedXgHome",
+      "label": "Berechnetes xG (oft null) (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik Berechnetes xG (oft null) – Home",
+      "sample": null
+    },
+    {
+      "key": "calculatedXgAway",
+      "label": "Berechnetes xG (oft null) (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik Berechnetes xG (oft null) – Away",
+      "sample": null
+    },
+    {
+      "key": "xgOnTargetHome",
+      "label": "xG on Target (xGOT) (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik xG on Target (xGOT) – Home",
+      "sample": null
+    },
+    {
+      "key": "xgOnTargetAway",
+      "label": "xG on Target (xGOT) (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik xG on Target (xGOT) – Away",
+      "sample": null
+    },
+    {
+      "key": "xgotFacedHome",
+      "label": "xGOT faced (Torwart) (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik xGOT faced (Torwart) – Home",
+      "sample": null
+    },
+    {
+      "key": "xgotFacedAway",
+      "label": "xGOT faced (Torwart) (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik xGOT faced (Torwart) – Away",
+      "sample": null
+    },
+    {
+      "key": "goalsPreventedHome",
+      "label": "Goals Prevented (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik Goals Prevented – Home",
+      "sample": null
+    },
+    {
+      "key": "goalsPreventedAway",
+      "label": "Goals Prevented (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik Goals Prevented – Away",
+      "sample": null
+    },
+    {
+      "key": "expectedAssistsHome",
+      "label": "Expected Assists (xA) (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik Expected Assists (xA) – Home",
+      "sample": null
+    },
+    {
+      "key": "expectedAssistsAway",
+      "label": "Expected Assists (xA) (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik Expected Assists (xA) – Away",
+      "sample": null
+    },
+    {
+      "key": "bigChancesHome",
+      "label": "Große Chancen (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik Große Chancen – Home",
+      "sample": null
+    },
+    {
+      "key": "bigChancesAway",
+      "label": "Große Chancen (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "xg",
+      "desc": "Match-Statistik Große Chancen – Away",
+      "sample": null
+    },
+    {
+      "key": "totalShotsHome",
+      "label": "Schüsse gesamt (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Schüsse gesamt – Home",
+      "sample": 9
+    },
+    {
+      "key": "totalShotsAway",
+      "label": "Schüsse gesamt (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Schüsse gesamt – Away",
+      "sample": 8
+    },
+    {
+      "key": "shotsOnGoalHome",
+      "label": "Torschüsse (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Torschüsse – Home",
+      "sample": 4
+    },
+    {
+      "key": "shotsOnGoalAway",
+      "label": "Torschüsse (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Torschüsse – Away",
+      "sample": 3
+    },
+    {
+      "key": "shotsOffGoalHome",
+      "label": "Schüsse daneben (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Schüsse daneben – Home",
+      "sample": 5
+    },
+    {
+      "key": "shotsOffGoalAway",
+      "label": "Schüsse daneben (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Schüsse daneben – Away",
+      "sample": 5
+    },
+    {
+      "key": "shotsInsideBoxHome",
+      "label": "Schüsse im Strafraum (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Schüsse im Strafraum – Home",
+      "sample": null
+    },
+    {
+      "key": "shotsInsideBoxAway",
+      "label": "Schüsse im Strafraum (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Schüsse im Strafraum – Away",
+      "sample": null
+    },
+    {
+      "key": "shotsOutsideBoxHome",
+      "label": "Schüsse außerhalb (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Schüsse außerhalb – Home",
+      "sample": null
+    },
+    {
+      "key": "shotsOutsideBoxAway",
+      "label": "Schüsse außerhalb (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Schüsse außerhalb – Away",
+      "sample": null
+    },
+    {
+      "key": "blockedShotsHome",
+      "label": "Geblockte Schüsse (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Geblockte Schüsse – Home",
+      "sample": 0
+    },
+    {
+      "key": "blockedShotsAway",
+      "label": "Geblockte Schüsse (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Geblockte Schüsse – Away",
+      "sample": 0
+    },
+    {
+      "key": "ballPossessionHome",
+      "label": "Ballbesitz % (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "possession",
+      "desc": "Match-Statistik Ballbesitz % – Home",
+      "sample": 51
+    },
+    {
+      "key": "ballPossessionAway",
+      "label": "Ballbesitz % (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "possession",
+      "desc": "Match-Statistik Ballbesitz % – Away",
+      "sample": 49
+    },
+    {
+      "key": "attacksHome",
+      "label": "Angriffe (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "attacks",
+      "desc": "Match-Statistik Angriffe – Home",
+      "sample": null
+    },
+    {
+      "key": "attacksAway",
+      "label": "Angriffe (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "attacks",
+      "desc": "Match-Statistik Angriffe – Away",
+      "sample": null
+    },
+    {
+      "key": "dangerousAttacksHome",
+      "label": "Gefährliche Angriffe (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "attacks",
+      "desc": "Match-Statistik Gefährliche Angriffe – Home",
+      "sample": null
+    },
+    {
+      "key": "dangerousAttacksAway",
+      "label": "Gefährliche Angriffe (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "attacks",
+      "desc": "Match-Statistik Gefährliche Angriffe – Away",
+      "sample": null
+    },
+    {
+      "key": "totalPassesHome",
+      "label": "Pässe gesamt (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Pässe gesamt – Home",
+      "sample": null
+    },
+    {
+      "key": "totalPassesAway",
+      "label": "Pässe gesamt (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Pässe gesamt – Away",
+      "sample": null
+    },
+    {
+      "key": "passesAccurateHome",
+      "label": "Angekommene Pässe (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Angekommene Pässe – Home",
+      "sample": null
+    },
+    {
+      "key": "passesAccurateAway",
+      "label": "Angekommene Pässe (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Angekommene Pässe – Away",
+      "sample": null
+    },
+    {
+      "key": "passesInFinalThirdHome",
+      "label": "Pässe im letzten Drittel (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Pässe im letzten Drittel – Home",
+      "sample": null
+    },
+    {
+      "key": "passesInFinalThirdAway",
+      "label": "Pässe im letzten Drittel (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Pässe im letzten Drittel – Away",
+      "sample": null
+    },
+    {
+      "key": "accurateThroughPassesHome",
+      "label": "Steilpässe angekommen (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Steilpässe angekommen – Home",
+      "sample": null
+    },
+    {
+      "key": "accurateThroughPassesAway",
+      "label": "Steilpässe angekommen (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Steilpässe angekommen – Away",
+      "sample": null
+    },
+    {
+      "key": "longPassesHome",
+      "label": "Lange Bälle (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Lange Bälle – Home",
+      "sample": null
+    },
+    {
+      "key": "longPassesAway",
+      "label": "Lange Bälle (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Lange Bälle – Away",
+      "sample": null
+    },
+    {
+      "key": "crossesHome",
+      "label": "Flanken (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Flanken – Home",
+      "sample": null
+    },
+    {
+      "key": "crossesAway",
+      "label": "Flanken (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Flanken – Away",
+      "sample": null
+    },
+    {
+      "key": "crossesCompletedHome",
+      "label": "Flanken angekommen (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Flanken angekommen – Home",
+      "sample": null
+    },
+    {
+      "key": "crossesCompletedAway",
+      "label": "Flanken angekommen (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "passing",
+      "desc": "Match-Statistik Flanken angekommen – Away",
+      "sample": null
+    },
+    {
+      "key": "totalTacklesHome",
+      "label": "Tackles (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Tackles – Home",
+      "sample": null
+    },
+    {
+      "key": "totalTacklesAway",
+      "label": "Tackles (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Tackles – Away",
+      "sample": null
+    },
+    {
+      "key": "successTacklesHome",
+      "label": "Erfolgreiche Tackles (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Erfolgreiche Tackles – Home",
+      "sample": null
+    },
+    {
+      "key": "successTacklesAway",
+      "label": "Erfolgreiche Tackles (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Erfolgreiche Tackles – Away",
+      "sample": null
+    },
+    {
+      "key": "interceptionsHome",
+      "label": "Abfangaktionen (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Abfangaktionen – Home",
+      "sample": null
+    },
+    {
+      "key": "interceptionsAway",
+      "label": "Abfangaktionen (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Abfangaktionen – Away",
+      "sample": null
+    },
+    {
+      "key": "clearancesHome",
+      "label": "Klärungsaktionen (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Klärungsaktionen – Home",
+      "sample": null
+    },
+    {
+      "key": "clearancesAway",
+      "label": "Klärungsaktionen (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Klärungsaktionen – Away",
+      "sample": null
+    },
+    {
+      "key": "clearancesCompletedHome",
+      "label": "Klärungen erfolgreich (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Klärungen erfolgreich – Home",
+      "sample": null
+    },
+    {
+      "key": "clearancesCompletedAway",
+      "label": "Klärungen erfolgreich (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Klärungen erfolgreich – Away",
+      "sample": null
+    },
+    {
+      "key": "duelsWonHome",
+      "label": "Zweikämpfe gewonnen (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Zweikämpfe gewonnen – Home",
+      "sample": null
+    },
+    {
+      "key": "duelsWonAway",
+      "label": "Zweikämpfe gewonnen (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Zweikämpfe gewonnen – Away",
+      "sample": null
+    },
+    {
+      "key": "goalkeeperSavesHome",
+      "label": "Paraden (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Paraden – Home",
+      "sample": null
+    },
+    {
+      "key": "goalkeeperSavesAway",
+      "label": "Paraden (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "defense",
+      "desc": "Match-Statistik Paraden – Away",
+      "sample": null
+    },
+    {
+      "key": "cornerKicksHome",
+      "label": "Ecken (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "setpieces",
+      "desc": "Match-Statistik Ecken – Home",
+      "sample": 9
+    },
+    {
+      "key": "cornerKicksAway",
+      "label": "Ecken (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "setpieces",
+      "desc": "Match-Statistik Ecken – Away",
+      "sample": 6
+    },
+    {
+      "key": "freeKicksHome",
+      "label": "Freistöße (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "setpieces",
+      "desc": "Match-Statistik Freistöße – Home",
+      "sample": null
+    },
+    {
+      "key": "freeKicksAway",
+      "label": "Freistöße (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "setpieces",
+      "desc": "Match-Statistik Freistöße – Away",
+      "sample": null
+    },
+    {
+      "key": "throwinsHome",
+      "label": "Einwürfe (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "setpieces",
+      "desc": "Match-Statistik Einwürfe – Home",
+      "sample": null
+    },
+    {
+      "key": "throwinsAway",
+      "label": "Einwürfe (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "setpieces",
+      "desc": "Match-Statistik Einwürfe – Away",
+      "sample": null
+    },
+    {
+      "key": "foulsHome",
+      "label": "Fouls (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "discipline",
+      "desc": "Match-Statistik Fouls – Home",
+      "sample": null
+    },
+    {
+      "key": "foulsAway",
+      "label": "Fouls (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "discipline",
+      "desc": "Match-Statistik Fouls – Away",
+      "sample": null
+    },
+    {
+      "key": "yellowCardsHome",
+      "label": "Gelbe Karten (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "discipline",
+      "desc": "Match-Statistik Gelbe Karten – Home",
+      "sample": 1
+    },
+    {
+      "key": "yellowCardsAway",
+      "label": "Gelbe Karten (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "discipline",
+      "desc": "Match-Statistik Gelbe Karten – Away",
+      "sample": 1
+    },
+    {
+      "key": "redCardsHome",
+      "label": "Rote Karten (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "discipline",
+      "desc": "Match-Statistik Rote Karten – Home",
+      "sample": 0
+    },
+    {
+      "key": "redCardsAway",
+      "label": "Rote Karten (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "discipline",
+      "desc": "Match-Statistik Rote Karten – Away",
+      "sample": 0
+    },
+    {
+      "key": "offsidesHome",
+      "label": "Abseits (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "discipline",
+      "desc": "Match-Statistik Abseits – Home",
+      "sample": null
+    },
+    {
+      "key": "offsidesAway",
+      "label": "Abseits (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "discipline",
+      "desc": "Match-Statistik Abseits – Away",
+      "sample": null
+    },
+    {
+      "key": "headedGoalsHome",
+      "label": "Kopftore (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "goals",
+      "desc": "Match-Statistik Kopftore – Home",
+      "sample": null
+    },
+    {
+      "key": "headedGoalsAway",
+      "label": "Kopftore (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "goals",
+      "desc": "Match-Statistik Kopftore – Away",
+      "sample": null
+    },
+    {
+      "key": "hitTheWoodworkHome",
+      "label": "Holz (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Holz – Home",
+      "sample": null
+    },
+    {
+      "key": "hitTheWoodworkAway",
+      "label": "Holz (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "shots",
+      "desc": "Match-Statistik Holz – Away",
+      "sample": null
+    },
+    {
+      "key": "errorsLeadingToShotHome",
+      "label": "Fehler → Schuss (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "errors",
+      "desc": "Match-Statistik Fehler → Schuss – Home",
+      "sample": null
+    },
+    {
+      "key": "errorsLeadingToShotAway",
+      "label": "Fehler → Schuss (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "errors",
+      "desc": "Match-Statistik Fehler → Schuss – Away",
+      "sample": null
+    },
+    {
+      "key": "errorsLeadingToGoalHome",
+      "label": "Fehler → Tor (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "errors",
+      "desc": "Match-Statistik Fehler → Tor – Home",
+      "sample": null
+    },
+    {
+      "key": "errorsLeadingToGoalAway",
+      "label": "Fehler → Tor (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "errors",
+      "desc": "Match-Statistik Fehler → Tor – Away",
+      "sample": null
+    },
+    {
+      "key": "touchesInOppositionBoxHome",
+      "label": "Touches im gegn. Strafraum (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "attacks",
+      "desc": "Match-Statistik Touches im gegn. Strafraum – Home",
+      "sample": null
+    },
+    {
+      "key": "touchesInOppositionBoxAway",
+      "label": "Touches im gegn. Strafraum (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "attacks",
+      "desc": "Match-Statistik Touches im gegn. Strafraum – Away",
+      "sample": null
+    },
+    {
+      "key": "distanceCoveredHome",
+      "label": "Laufleistung (Home)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "physical",
+      "desc": "Match-Statistik Laufleistung – Home",
+      "sample": null
+    },
+    {
+      "key": "distanceCoveredAway",
+      "label": "Laufleistung (Away)",
+      "when": "post",
+      "group": "statistics",
+      "subgroup": "physical",
+      "desc": "Match-Statistik Laufleistung – Away",
+      "sample": null
+    },
+    {
+      "key": "bookmakerId",
+      "label": "Bookie ID",
+      "when": "both",
+      "group": "odds",
+      "desc": "Buchmacher-ID",
+      "sample": null
+    },
+    {
+      "key": "bookmakerName",
+      "label": "Bookie",
+      "when": "both",
+      "group": "odds",
+      "desc": "Buchmacher-Name",
+      "sample": null
+    },
+    {
+      "key": "marketId",
+      "label": "Market ID",
+      "when": "both",
+      "group": "odds",
+      "desc": "Markt-ID",
+      "sample": null
+    },
+    {
+      "key": "marketName",
+      "label": "Market",
+      "when": "both",
+      "group": "odds",
+      "desc": "z.B. Match Winner, Goals Over/Under, BTTS",
+      "sample": null
+    },
+    {
+      "key": "odds[].name",
+      "label": "Outcome",
+      "when": "both",
+      "group": "odds",
+      "desc": "Home/Draw/Away/Over…",
+      "sample": null
+    },
+    {
+      "key": "odds[].value",
+      "label": "Quote",
+      "when": "both",
+      "group": "odds",
+      "desc": "Dezimalquote",
+      "sample": null
+    },
+    {
+      "key": "opening",
+      "label": "Opening-Flag",
+      "when": "pre",
+      "group": "odds",
+      "desc": "Query ?opening=true für Eröffnungsquoten",
+      "sample": null
+    },
+    {
+      "key": "home|away|…",
+      "label": "Team-Scope",
+      "when": "post",
+      "group": "profits",
+      "desc": "home / away / homeFirstHalf / awayFirstHalf / …",
+      "sample": null
+    },
+    {
+      "key": "market",
+      "label": "Market",
+      "when": "post",
+      "group": "profits",
+      "desc": "z.B. Match Winner",
+      "sample": null
+    },
+    {
+      "key": "outcomes[].name",
+      "label": "Outcome",
+      "when": "post",
+      "group": "profits",
+      "desc": "Win/Draw/Lose…",
+      "sample": null
+    },
+    {
+      "key": "outcomes[].profit",
+      "label": "Profit",
+      "when": "post",
+      "group": "profits",
+      "desc": "Kumulativer Profit über Historie",
+      "sample": null
+    },
+    {
+      "key": "outcomes[].gamesCount",
+      "label": "Spiele",
+      "when": "post",
+      "group": "profits",
+      "desc": "Anzahl Spiele",
+      "sample": null
+    },
+    {
+      "key": "outcomes[].winCount",
+      "label": "Treffer",
+      "when": "post",
+      "group": "profits",
+      "desc": "Gewonnene Wetten",
+      "sample": null
+    },
+    {
+      "key": "outcomes[].profitHistory",
+      "label": "Profit-Verlauf",
+      "when": "post",
+      "group": "profits",
+      "desc": "Array der Profit-Kurve",
+      "sample": null
+    }
+  ],
+  "sample": {
+    "game_id": 1577596,
+    "match": "Leningradets – Ska-khabarovsk",
+    "date": "2026-11-25T16:00:00+00:00",
+    "league": "First League",
+    "glicko": {},
+    "statistics_keys": [
+      "accurateThroughPassesAway",
+      "accurateThroughPassesHome",
+      "attacksAway",
+      "attacksHome",
+      "ballPossessionAway",
+      "ballPossessionHome",
+      "bigChancesAway",
+      "bigChancesHome",
+      "blockedShotsAway",
+      "blockedShotsHome",
+      "calculatedXgAway",
+      "calculatedXgHome",
+      "clearancesAway",
+      "clearancesCompletedAway",
+      "clearancesCompletedHome",
+      "clearancesHome",
+      "cornerKicksAway",
+      "cornerKicksHome",
+      "crossesAway",
+      "crossesCompletedAway",
+      "crossesCompletedHome",
+      "crossesHome",
+      "dangerousAttacksAway",
+      "dangerousAttacksHome",
+      "distanceCoveredAway",
+      "distanceCoveredHome",
+      "duelsWonAway",
+      "duelsWonHome",
+      "errorsLeadingToGoalAway",
+      "errorsLeadingToGoalHome",
+      "errorsLeadingToShotAway",
+      "errorsLeadingToShotHome",
+      "expectedAssistsAway",
+      "expectedAssistsHome",
+      "expectedGoalsAway",
+      "expectedGoalsHome",
+      "foulsAway",
+      "foulsHome",
+      "freeKicksAway",
+      "freeKicksHome",
+      "goalkeeperSavesAway",
+      "goalkeeperSavesHome",
+      "goalsPreventedAway",
+      "goalsPreventedHome",
+      "headedGoalsAway",
+      "headedGoalsHome",
+      "hitTheWoodworkAway",
+      "hitTheWoodworkHome",
+      "interceptionsAway",
+      "interceptionsHome",
+      "longPassesAway",
+      "longPassesHome",
+      "offsidesAway",
+      "offsidesHome",
+      "otherStatsAway",
+      "otherStatsHome",
+      "passesAccurateAway",
+      "passesAccurateHome",
+      "passesInFinalThirdAway",
+      "passesInFinalThirdHome",
+      "redCardsAway",
+      "redCardsHome",
+      "shotsInsideBoxAway",
+      "shotsInsideBoxHome",
+      "shotsOffGoalAway",
+      "shotsOffGoalHome",
+      "shotsOnGoalAway",
+      "shotsOnGoalHome",
+      "shotsOutsideBoxAway",
+      "shotsOutsideBoxHome",
+      "successTacklesAway",
+      "successTacklesHome",
+      "throwinsAway",
+      "throwinsHome",
+      "totalPassesAway",
+      "totalPassesHome",
+      "totalShotsAway",
+      "totalShotsHome",
+      "totalTacklesAway",
+      "totalTacklesHome",
+      "touchesInOppositionBoxAway",
+      "touchesInOppositionBoxHome",
+      "xgOnTargetAway",
+      "xgOnTargetHome",
+      "xgotFacedAway",
+      "xgotFacedHome",
+      "yellowCardsAway",
+      "yellowCardsHome"
+    ],
+    "odds_bookmakers": []
+  },
+  "error": null,
+  "field_count": 134
+}

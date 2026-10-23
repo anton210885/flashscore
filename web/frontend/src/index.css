@@ -1,0 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #0f1419;
+  --bg-elevated: #161d27;
+  --bg-row: #1a2330;
+  --bg-row-hover: #243044;
+  --border: #2a3544;
+  --text: #e8eef6;
+  --muted: #8b9bb0;
+  --accent: #3d9cfd;
+  --accent-soft: rgba(61, 156, 253, 0.15);
+  --green: #34d399;
+  --red: #f87171;
+  --yellow: #fbbf24;
+  --today: #38bdf8;
+  --radius: 10px;
+  --font: 'DM Sans', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  background: radial-gradient(1200px 600px at 10% -10%, #1a2a40 0%, transparent 55%),
+    radial-gradient(900px 500px at 90% 0%, #152235 0%, transparent 50%), var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

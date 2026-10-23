@@ -1,0 +1,28 @@
+# Secrets / lokale Umgebung
+.env
+.env.local
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node / Frontend
+web/frontend/node_modules/
+web/frontend/dist/
+
+# Logs & OS
+logs/
+*.log
+.DS_Store
+Thumbs.db
+
+# Daten / Datenbanken (lokal, groß)
+data/*.db
+data/*.db-*
+*.accdb
+
+# Altbestand
+old/

@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Beispiel: laufendes Team-xG / xGA Avg</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a222c;
+      --line: #2a3542;
+      --text: #e8eef4;
+      --muted: #8b9aab;
+      --accent: #3d9cf0;
+      --home: #4ec9b0;
+      --away: #ce9178;
+      --ok: #9cdcfe;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+      padding: 1.5rem;
+    }
+    h1 { font-size: 1.35rem; margin: 0 0 0.35rem; }
+    h2 { font-size: 1.05rem; margin: 1.75rem 0 0.6rem; color: var(--ok); }
+    p, li { color: var(--muted); max-width: 52rem; }
+    .note {
+      border-left: 3px solid var(--accent);
+      padding: 0.6rem 0.9rem;
+      background: var(--panel);
+      margin: 1rem 0 1.5rem;
+      max-width: 52rem;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 52rem;
+      background: var(--panel);
+      font-size: 0.9rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.45rem 0.65rem;
+      text-align: left;
+    }
+    th { color: var(--muted); font-weight: 600; }
+    .home { color: var(--home); }
+    .away { color: var(--away); }
+    .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; }
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+      margin: 1rem 0;
+      max-width: 52rem;
+      background: #141b23;
+    }
+    .step strong { color: var(--text); }
+    .formula {
+      background: #0c1015;
+      border: 1px dashed var(--line);
+      padding: 0.55rem 0.75rem;
+      margin: 0.5rem 0;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.82rem;
+      color: var(--ok);
+    }
+    .tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+      margin-right: 0.4rem;
+    }
+    button {
+      background: var(--accent);
+      color: #061018;
+      border: 0;
+      padding: 0.45rem 0.9rem;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      margin: 0.25rem 0.35rem 0.25rem 0;
+    }
+    button.secondary { background: #2a3542; color: var(--text); }
+    #live { max-width: 52rem; }
+  </style>
+</head>
+<body>
+  <h1>Form2 — laufender Team-Durchschnitt (parallel zu Glicko2)</h1>
+  <p>
+    Name in der DB/App: <strong style="color:var(--text)">Form2</strong>
+    (Tabelle <code>game_form2</code>, Metriken <code>xg_form2_*</code>).
+    Ab dem ersten Match mit xG: pro Team XG / XGA / GF / GA.
+    Vor jedem nächsten Spiel gilt der
+    <strong style="color:var(--text)">Durchschnitt bis genau zu diesem Zeitpunkt</strong>.
+    Pro Saison Reset; nur Meisterschaften (keine UEFA/WM).
+  </p>
+  <div class="note">
+    Bitte korrigieren: Stimmt die Reihenfolge? Zählt nur Liga? Werden Spiele
+    ohne xG übersprungen? Soll die Vorhersage für Match N nur Spiele 1…N−1 nutzen
+    (kein Look-ahead)?
+  </div>
+
+  <h2>1) Rohdaten (Beispiel-Liga, 3 Teams)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Spieltag</th>
+        <th>Match</th>
+        <th>Ergebnis</th>
+        <th>Match-xG H</th>
+        <th>Match-xG A</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td><td><span class="home">Alpha</span> – <span class="away">Beta</span></td>
+        <td class="mono">2:1</td><td class="mono">2.1</td><td class="mono">0.8</td>
+      </tr>
+      <tr>
+        <td>2</td><td><span class="home">Gamma</span> – <span class="away">Alpha</span></td>
+        <td class="mono">1:1</td><td class="mono">1.4</td><td class="mono">1.6</td>
+      </tr>
+      <tr>
+        <td>3</td><td><span class="home">Beta</span> – <span class="away">Gamma</span></td>
+        <td class="mono">0:2</td><td class="mono">0.9</td><td class="mono">2.0</td>
+      </tr>
+      <tr>
+        <td>4</td><td><span class="home">Alpha</span> – <span class="away">Gamma</span></td>
+        <td class="mono">?</td><td class="mono">—</td><td class="mono">—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2) Nach Match 1 — Team-Tabelle (Summen)</h2>
+  <div class="step">
+    <span class="tag">nach Spielende</span>
+    <strong>Alpha 2:1 Beta</strong>, Match-xG 2.1 – 0.8
+    <div class="formula">
+      Alpha: XG += 2.1, XGA += 0.8, GF += 2, GA += 1, Spiele = 1<br />
+      Beta:&nbsp; XG += 0.8, XGA += 2.1, GF += 1, GA += 2, Spiele = 1<br />
+      Gamma: noch 0 Spiele
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Team</th>
+        <th>Spiele</th>
+        <th>Σ XG</th>
+        <th>Σ XGA</th>
+        <th>Σ GF</th>
+        <th>Σ GA</th>
+        <th>avg XG</th>
+        <th>avg XGA</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="home">Alpha</td>
+        <td class="mono">1</td>
+        <td class="mono">2.1</td><td class="mono">0.8</td>
+        <td class="mono">2</td><td class="mono">1</td>
+        <td class="mono">2.10</td><td class="mono">0.80</td>
+      </tr>
+      <tr>
+        <td class="away">Beta</td>
+        <td class="mono">1</td>
+        <td class="mono">0.8</td><td class="mono">2.1</td>
+        <td class="mono">1</td><td class="mono">2</td>
+        <td class="mono">0.80</td><td class="mono">2.10</td>
+      </tr>
+      <tr>
+        <td>Gamma</td>
+        <td class="mono">0</td>
+        <td class="mono">—</td><td class="mono">—</td>
+        <td class="mono">—</td><td class="mono">—</td>
+        <td class="mono">—</td><td class="mono">—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3) Vor Match 2 — „Stand zum Zeitpunkt“ (wie Glicko-Input)</h2>
+  <div class="step">
+    <span class="tag">prematch</span>
+    <strong>Gamma (H) vs Alpha (A)</strong> — Vorhersage nur aus Vergangenheit
+    <div class="formula">
+      Alpha avg XG = 2.10, avg XGA = 0.80 &nbsp;(1 Spiel)<br />
+      Gamma: noch kein Match → kein Avg / Default / Match überspringen?<br />
+      <br />
+      Idee für „erwartete“ xG im Spiel (nur Beispiel, korrigierbar):<br />
+      xG_home_pred ≈ f(Gamma.avgXG, Alpha.avgXGA)<br />
+      xG_away_pred ≈ f(Alpha.avgXG, Gamma.avgXGA)
+    </div>
+  </div>
+
+  <h2>4) Nach Match 2 — Avg wird neu</h2>
+  <div class="step">
+    <span class="tag">nach Spielende</span>
+    Gamma 1:1 Alpha, Match-xG 1.4 – 1.6
+    <div class="formula">
+      Gamma: XG=1.4, XGA=1.6, GF=1, GA=1, n=1 → avg 1.40 / 1.60<br />
+      Alpha: XG=2.1+1.6=3.7, XGA=0.8+1.4=2.2, GF=3, GA=2, n=2<br />
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;avg XG = 3.7/2 = <strong>1.85</strong>, avg XGA = 2.2/2 = <strong>1.10</strong>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Team</th>
+        <th>Spiele</th>
+        <th>Σ XG</th>
+        <th>Σ XGA</th>
+        <th>avg XG</th>
+        <th>avg XGA</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="home">Alpha</td>
+        <td class="mono">2</td>
+        <td class="mono">3.7</td><td class="mono">2.2</td>
+        <td class="mono">1.85</td><td class="mono">1.10</td>
+      </tr>
+      <tr>
+        <td class="away">Beta</td>
+        <td class="mono">1</td>
+        <td class="mono">0.8</td><td class="mono">2.1</td>
+        <td class="mono">0.80</td><td class="mono">2.10</td>
+      </tr>
+      <tr>
+        <td>Gamma</td>
+        <td class="mono">1</td>
+        <td class="mono">1.4</td><td class="mono">1.6</td>
+        <td class="mono">1.40</td><td class="mono">1.60</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5) Vor Match 4 — so würdest du „xg_glicko“ füllen</h2>
+  <div class="step">
+    <span class="tag">prematch</span>
+    <strong>Alpha (H) vs Gamma (A)</strong> — beide haben schon Historie
+    <div class="formula">
+      Stand VOR Kickoff Match 4 (nach Match 2+3 … hier vereinfacht nach Match 2):<br />
+      Alpha: avgXG 1.85, avgXGA 1.10<br />
+      Gamma: avgXG 1.40, avgXGA 1.60<br />
+      <br />
+      Beispiel-Formel (Platzhalter — bitte korrigieren):<br />
+      xg_home_pred = (Alpha.avgXG + Gamma.avgXGA) / 2<br />
+      xg_away_pred = (Gamma.avgXG + Alpha.avgXGA) / 2<br />
+      → z.B. (1.85+1.60)/2 = 1.725 &nbsp;|&nbsp; (1.40+1.10)/2 = 1.25<br />
+      ratio = home/away = 1.725/1.25 ≈ 1.38
+    </div>
+  </div>
+
+  <h2>6) Interaktiv: Spiele abspielen</h2>
+  <p>Klick „Nächstes Match“ — Team-Avgs aktualisieren sich erst <em>nach</em> dem Ergebnis.</p>
+  <div id="live">
+    <button type="button" id="btnNext">Nächstes Match</button>
+    <button type="button" class="secondary" id="btnReset">Reset</button>
+    <p id="status" style="margin-top:0.75rem"></p>
+    <table id="teamTable">
+      <thead>
+        <tr>
+          <th>Team</th><th>n</th>
+          <th>Σ XG</th><th>Σ XGA</th>
+          <th>Σ GF</th><th>Σ GA</th>
+          <th>avg XG</th><th>avg XGA</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <h2 style="margin-top:1.2rem">Log</h2>
+    <ol id="log" style="color:var(--muted); padding-left:1.2rem"></ol>
+  </div>
+
+  <script>
+    const matches = [
+      { day: 1, home: "Alpha", away: "Beta",  hg: 2, ag: 1, hxg: 2.1, axg: 0.8 },
+      { day: 2, home: "Gamma", away: "Alpha", hg: 1, ag: 1, hxg: 1.4, axg: 1.6 },
+      { day: 3, home: "Beta",  away: "Gamma", hg: 0, ag: 2, hxg: 0.9, axg: 2.0 },
+    ];
+
+    const emptyTeam = () => ({ n: 0, xg: 0, xga: 0, gf: 0, ga: 0 });
+    let teams = {};
+    let idx = 0;
+
+    function ensure(name) {
+      if (!teams[name]) teams[name] = emptyTeam();
+      return teams[name];
+    }
+
+    function avg(t, key) {
+      return t.n ? (t[key] / t.n) : null;
+    }
+
+    function fmt(v) {
+      return v == null ? "—" : v.toFixed(2);
+    }
+
+    function snapshotBefore(home, away) {
+      const h = ensure(home);
+      const a = ensure(away);
+      return {
+        home: { n: h.n, avgXG: avg(h, "xg"), avgXGA: avg(h, "xga") },
+        away: { n: a.n, avgXG: avg(a, "xg"), avgXGA: avg(a, "xga") },
+      };
+    }
+
+    function applyMatch(m) {
+      const h = ensure(m.home);
+      const a = ensure(m.away);
+      h.xg += m.hxg; h.xga += m.axg; h.gf += m.hg; h.ga += m.ag; h.n += 1;
+      a.xg += m.axg; a.xga += m.hxg; a.gf += m.ag; a.ga += m.hg; a.n += 1;
+    }
+
+    function renderTeams() {
+      const names = ["Alpha", "Beta", "Gamma"];
+      const tb = document.querySelector("#teamTable tbody");
+      tb.innerHTML = names.map((name) => {
+        const t = ensure(name);
+        return `<tr>
+          <td>${name}</td>
+          <td class="mono">${t.n}</td>
+          <td class="mono">${fmt(t.n ? t.xg : null)}</td>
+          <td class="mono">${fmt(t.n ? t.xga : null)}</td>
+          <td class="mono">${t.n ? t.gf : "—"}</td>
+          <td class="mono">${t.n ? t.ga : "—"}</td>
+          <td class="mono">${fmt(avg(t, "xg"))}</td>
+          <td class="mono">${fmt(avg(t, "xga"))}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function reset() {
+      teams = {};
+      idx = 0;
+      document.getElementById("log").innerHTML = "";
+      document.getElementById("status").textContent =
+        "Noch kein Match. Vor dem 1. Spiel: alle Avgs leer.";
+      renderTeams();
+    }
+
+    document.getElementById("btnReset").onclick = reset;
+    document.getElementById("btnNext").onclick = () => {
+      if (idx >= matches.length) {
+        document.getElementById("status").textContent =
+          "Fertig. Match 4 wäre Upcoming: nur noch Avgs aus Vergangenheit.";
+        return;
+      }
+      const m = matches[idx];
+      const before = snapshotBefore(m.home, m.away);
+      const li = document.createElement("li");
+      li.innerHTML = `<span style="color:var(--text)">Spieltag ${m.day}: ${m.home}–${m.away}</span><br/>
+        <span class="mono">VORHER ${m.home}: avgXG ${fmt(before.home.avgXG)} / avgXGA ${fmt(before.home.avgXGA)} (n=${before.home.n});
+        ${m.away}: avgXG ${fmt(before.away.avgXG)} / avgXGA ${fmt(before.away.avgXGA)} (n=${before.away.n})</span><br/>
+        Ergebnis ${m.hg}:${m.ag}, Match-xG ${m.hxg}–${m.axg} → danach Avgs neu.`;
+      document.getElementById("log").appendChild(li);
+      applyMatch(m);
+      idx += 1;
+      document.getElementById("status").textContent =
+        `Nach Match ${idx}/${matches.length} — Team-Tabelle aktualisiert.`;
+      renderTeams();
+    };
+
+    reset();
+  </script>
+</body>
+</html>

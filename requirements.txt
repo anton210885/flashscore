@@ -1,0 +1,6 @@
+requests
+matplotlib
+pandas
+openpyxl
+fastapi
+uvicorn[standard]
