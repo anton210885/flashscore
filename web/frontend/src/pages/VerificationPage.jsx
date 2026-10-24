@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
+import ProfitChart from '../components/ProfitChart'
 
 function num(v, digits = 2) {
   if (v == null || v === '') return '—'
@@ -228,6 +229,9 @@ export default function VerificationPage() {
           </strong>
         </span>
       </div>
+
+      <h2 className="page-sub" style={{ marginTop: '0.5rem' }}>Profit-Verlauf</h2>
+      <ProfitChart bets={marketBets} strategies={data?.summary || []} />
 
       <h2 className="page-sub" style={{ marginTop: '0.5rem' }}>Pro Strategie</h2>
       {!summary.length && !loading ? (

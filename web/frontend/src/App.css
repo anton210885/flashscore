@@ -1545,3 +1545,140 @@ code {
   opacity: 0.65;
   font-size: 0.85em;
 }
+
+/* Verifikation: Profit-Verlauf */
+.profit-chart__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.profit-chart__filters .detail-tabs {
+  margin-bottom: 0;
+}
+
+.profit-chart__dates {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+}
+
+.profit-chart__stats {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.profit-chart__stats strong {
+  color: var(--text);
+}
+
+.profit-chart__stats strong.pos {
+  color: var(--green);
+}
+
+.profit-chart__stats strong.neg {
+  color: var(--red);
+}
+
+.profit-chart__picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.6rem 0;
+}
+
+.profit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.profit-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.profit-chip.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.profit-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.profit-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  border: 2px solid transparent;
+  flex: none;
+}
+
+.profit-swatch--dashed {
+  border-style: dashed;
+  border-radius: 2px;
+}
+
+.profit-chart__empty {
+  margin: 0.5rem 0 1rem;
+}
+
+.profit-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  padding: 0.25rem 0.75rem 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.profit-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.profit-tooltip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.profit-tooltip__date {
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.profit-tooltip__row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.profit-tooltip__name {
+  min-width: 7rem;
+}
+
+.profit-tooltip .pos {
+  color: var(--green);
+}
+
+.profit-tooltip .neg {
+  color: var(--red);
+}
