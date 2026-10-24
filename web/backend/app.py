@@ -5,6 +5,7 @@ import mimetypes
 import os
 import subprocess
 import sys
+import threading
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
@@ -284,7 +285,9 @@ def verification(strategy_id: Optional[str] = Query(None)):
     """Verifikation: festgehaltene Strategie-Treffer + Zusammenfassung pro Strategie."""
     conn = db_connect(os.path.join(ROOT, "data", "flashscore.db"))
     try:
-        return verification_svc.report(conn, strategy_id=strategy_id)
+        return verification_svc.report(
+            conn, strategy_id=strategy_id, presets=presets_svc.load_presets()
+        )
     finally:
         conn.close()
 
@@ -312,11 +315,30 @@ def strategy_presets_upcoming(body: Dict[str, Any] = Body(...)):
 
 @app.post("/api/strategy/presets")
 def strategy_presets_save(body: Dict[str, Any] = Body(...)):
-    """Komplette Preset-Liste speichern (ersetzt den bisherigen Stand)."""
+    """Komplette Preset-Liste speichern (ersetzt den bisherigen Stand).
+
+    Neue oder geänderte Strategien werden sofort im Hintergrund für die Verifikation
+    geprüft — sonst erst beim nächsten stündlichen Lauf der Pipeline.
+    """
+    before = {p.get("id"): p.get("filters") for p in presets_svc.load_presets()}
     try:
-        return {"presets": presets_svc.save_presets(body.get("presets"))}
+        saved = presets_svc.save_presets(body.get("presets"))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    changed = [p for p in saved if p.get("id") not in before or before[p["id"]] != p.get("filters")]
+    if changed:
+        threading.Thread(target=_verification_scan_presets, args=(changed,), daemon=True).start()
+    return {"presets": saved}
+
+
+def _verification_scan_presets(presets: Any) -> None:
+    conn = db_connect(os.path.join(ROOT, "data", "flashscore.db"))
+    try:
+        verification_svc.record_upcoming(conn, presets)
+    except Exception as e:
+        print(f"[verification] Scan neuer Strategien fehlgeschlagen: {e}", flush=True)
+    finally:
+        conn.close()
 
 
 @app.get("/api/games")

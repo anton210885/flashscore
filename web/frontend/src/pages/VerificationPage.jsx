@@ -157,10 +157,12 @@ export default function VerificationPage() {
     const backtest = Object.fromEntries((data?.summary || []).map((s) => [s.strategy_id, s]))
     const groups = {}
     for (const b of marketBets) (groups[b.strategy_id] ||= []).push(b)
+    // Gespeicherte Strategien ohne Treffer trotzdem zeigen (0 Wetten)
+    for (const s of data?.summary || []) if (!s.bets) groups[s.strategy_id] ||= []
     return Object.entries(groups)
       .map(([id, rows]) => ({
         strategy_id: id,
-        strategy: rows[rows.length - 1].strategy_name,
+        strategy: rows.length ? rows[rows.length - 1].strategy_name : backtest[id]?.strategy,
         backtest_roi: backtest[id]?.backtest_roi,
         backtest_n: backtest[id]?.backtest_n,
         backtest: backtest[id]?.backtest || null,

@@ -268,8 +268,16 @@ def _forward_stats(done: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def report(conn: sqlite3.Connection, strategy_id: Optional[str] = None) -> Dict[str, Any]:
-    """Alle Einträge + Zusammenfassung pro Strategie."""
+def report(
+    conn: sqlite3.Connection,
+    strategy_id: Optional[str] = None,
+    presets: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Alle Einträge + Zusammenfassung pro Strategie.
+
+    Mit `presets` stehen auch gespeicherte Strategien ohne Treffer in der Zusammenfassung
+    (0 Wetten) — sonst taucht eine neue Strategie erst nach ihrem ersten Treffer auf.
+    """
     ensure_schema(conn)
     conn.row_factory = sqlite3.Row
     where, params = ("WHERE strategy_id = ?", [strategy_id]) if strategy_id else ("", [])
@@ -289,6 +297,12 @@ def report(conn: sqlite3.Connection, strategy_id: Optional[str] = None) -> Dict[
     by_strategy: Dict[str, List[Dict[str, Any]]] = {}
     for b in bets:
         by_strategy.setdefault(b["strategy_id"], []).append(b)
+    names = {sid: items[-1]["strategy_name"] for sid, items in by_strategy.items()}
+    for p in presets or []:
+        sid = p.get("id")
+        if sid and sid not in by_strategy and (not strategy_id or sid == strategy_id):
+            by_strategy[sid] = []
+            names[sid] = p.get("name")
     summary = []
     for sid, items in by_strategy.items():
         done = [b for b in items if b["settled_at"] is not None]
@@ -302,7 +316,7 @@ def report(conn: sqlite3.Connection, strategy_id: Optional[str] = None) -> Dict[
         summary.append(
             {
                 "strategy_id": sid,
-                "strategy": items[-1]["strategy_name"],
+                "strategy": names[sid],
                 "bets": len(items),
                 "open": len(items) - len(done),
                 "settled": len(done),
