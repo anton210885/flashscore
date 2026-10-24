@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from services import strategy_service as strat
+from services import swisslos_odds_service
 from services import swisslos_service as swisslos
 
 SCHEMA_SQL = """
@@ -287,8 +288,16 @@ def report(
         for r in conn.execute(f"SELECT * FROM verification_bets {where} ORDER BY date ASC, strategy_name ASC", params)
     ]
     league_of = swisslos.league_ids_for_games(conn, (b["game_id"] for b in bets))
+    sl_odds = swisslos_odds_service.odds_for_games(conn, (b["game_id"] for b in bets))
     for b in bets:
         b["swisslos"] = swisslos.is_swisslos(league_of.get(int(b["game_id"])))
+        # Letzte Swisslos-Quote vor Anpfiff (Prototyp) und Profit, wenn dort gewettet
+        col = swisslos_odds_service.MARKET_COL.get(b["market"])
+        b["odds_swisslos"] = (sl_odds.get(int(b["game_id"])) or {}).get(col) if col else None
+        b["profit_swisslos"] = (
+            None if b["settled_at"] is None or not b["odds_swisslos"]
+            else (b["odds_swisslos"] - 1.0 if b["won"] == 1 else -1.0)
+        )
         b["odds_used"] = (
             (b["odds_opening"] if b["odds_type"] == "opening" else b["odds_closing"]) or b["odds_first"]
         )

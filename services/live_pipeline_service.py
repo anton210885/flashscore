@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -194,6 +195,7 @@ class LivePipelineService:
         xg_lookback_days: int = 3,
         tables_batch: int = 15,
         verify_interval: int = 3600,
+        swisslos_interval: int = 3600,
         odds_refresh_hours: int = 2,
         odds_refresh_batch: int = 60,
         odds_final_batch: int = 40,
@@ -220,6 +222,9 @@ class LivePipelineService:
         self.xg_lookback_days = max(1, int(xg_lookback_days))
         self.tables_batch = max(1, int(tables_batch))
         self.verify_interval = max(600, int(verify_interval))
+        # 0 = Swisslos-Quoten nicht abholen
+        self.swisslos_interval = 0 if not swisslos_interval else max(900, int(swisslos_interval))
+        self._swisslos_thread: Optional[threading.Thread] = None
         self.odds_refresh_hours = max(1, int(odds_refresh_hours))
         self.odds_refresh_batch = max(5, int(odds_refresh_batch))
         self.odds_final_batch = max(5, int(odds_final_batch))
@@ -236,6 +241,7 @@ class LivePipelineService:
             "enrich": {},
             "catchup": {},
             "verify": {},
+            "swisslos": {},
         }
         conn = self.db.get_connection()
         conn.execute(FETCH_ATTEMPTS_SQL)
@@ -308,6 +314,7 @@ class LivePipelineService:
                 "enrich_s": self.enrich_interval,
                 "catchup_s": self.catchup_interval,
                 "verify_s": self.verify_interval,
+                "swisslos_s": self.swisslos_interval,
             },
             "jobs": self._jobs,
             "queue": self._queue_snapshot(),
@@ -1122,6 +1129,36 @@ class LivePipelineService:
         self._jobs["verify"] = {"last_run": _now_iso(), "ok": not stats["errors"], "stats": stats}
         return stats
 
+    # ── Job 7: Swisslos-Quoten (eigener Thread, ein Lauf dauert einige Minuten) ─
+
+    def start_swisslos(self) -> bool:
+        if self._swisslos_thread is not None and self._swisslos_thread.is_alive():
+            return False
+        self._swisslos_thread = threading.Thread(target=self.job_swisslos, name="swisslos-odds", daemon=True)
+        self._swisslos_thread.start()
+        return True
+
+    def job_swisslos(self) -> Dict[str, Any]:
+        from database import connect
+        from services import swisslos_odds_service
+
+        conn = connect(os.path.join(ROOT, "data", "flashscore.db"))
+        try:
+            stats = swisslos_odds_service.run(conn, log=self.log)
+            self.log(
+                f"swisslos: spiele={stats['events']} zugeordnet={stats['matched']} "
+                f"gespeichert={stats['written']} nicht_zugeordnet={stats['unmatched']} "
+                f"dauer={stats['seconds']}s"
+            )
+            self._jobs["swisslos"] = {"last_run": _now_iso(), "ok": True, "stats": stats}
+        except Exception as e:
+            stats = {"error": str(e)}
+            self.log(f"swisslos: Fehler: {e}")
+            self._jobs["swisslos"] = {"last_run": _now_iso(), "ok": False, "error": str(e)}
+        finally:
+            conn.close()
+        return stats
+
     # ── Main loop ─────────────────────────────────────────────────────
 
     def run_forever(self) -> None:
@@ -1141,6 +1178,7 @@ class LivePipelineService:
         next_catchup = 0.0
         # Verifikation ist teuer (Analyse aller Strategien) — erst nach den anderen Jobs
         next_verify = time.time() + 120
+        next_swisslos = time.time() + 60
         self._write_status()
 
         try:
@@ -1171,6 +1209,9 @@ class LivePipelineService:
                         self.job_verify()
                         next_verify = time.time() + self.verify_interval
                         self._write_status()
+                    if self.swisslos_interval and now >= next_swisslos:
+                        self.start_swisslos()
+                        next_swisslos = time.time() + self.swisslos_interval
                 except Exception as e:
                     self.log(f"Loop-Fehler: {e}")
                     self._write_status({"last_error": str(e)})

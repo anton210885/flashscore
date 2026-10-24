@@ -191,6 +191,14 @@ export default function VerificationPage() {
       .sort((a, b) => String(a.strategy).localeCompare(String(b.strategy)))
   }, [data, marketBets])
   const total = useMemo(() => aggregate(marketBets), [marketBets])
+  // Vergleich auf denselben Wetten: abgerechnet und mit Swisslos-Quote
+  const slCompare = useMemo(() => {
+    const rows = marketBets.filter((b) => b.profit_swisslos != null)
+    const sum = (key) => rows.reduce((acc, b) => acc + (Number(b[key]) || 0), 0)
+    const sl = sum('profit_swisslos')
+    const pin = sum('profit')
+    return { n: rows.length, sl, pin, slRoi: rows.length ? (sl / rows.length) * 100 : null }
+  }, [marketBets])
   const bets = useMemo(() => {
     const rows = marketBets.filter(
       (b) => (!strategy || b.strategy_id === strategy) && (!status || b.status === status),
@@ -251,6 +259,14 @@ export default function VerificationPage() {
             {total.roi_pct == null ? '—' : `${signed(total.roi_pct, 1)}%`}
           </strong>
         </span>
+        {slCompare.n ? (
+          <span title="Nur abgerechnete Wetten, für die eine Swisslos-Quote vor Anpfiff gespeichert ist">
+            Mit Swisslos-Quoten ({slCompare.n} W.): Profit{' '}
+            <strong className={tone(slCompare.sl)}>{signed(slCompare.sl)}</strong>
+            {' · '}ROI <strong className={tone(slCompare.slRoi)}>{signed(slCompare.slRoi, 1)}%</strong>
+            {' · '}Pinnacle auf denselben: <strong className={tone(slCompare.pin)}>{signed(slCompare.pin)}</strong>
+          </span>
+        ) : null}
       </div>
 
       <h2 className="page-sub" style={{ marginTop: '0.5rem' }}>Profit-Verlauf</h2>
@@ -384,6 +400,7 @@ export default function VerificationPage() {
               <th>Gast</th>
               <th>Markt</th>
               <th className="num" title="Quote, mit der abgerechnet wird (Opening/Closing laut Strategie)">Quote</th>
+              <th className="num" title="Letzte Swisslos-Quote vor Anpfiff (stündlich abgeholt)">Swisslos</th>
               <th>Strategie</th>
               <th className="num">Ergebnis</th>
               <th>Status</th>
@@ -403,6 +420,12 @@ export default function VerificationPage() {
                 <td>{b.away}</td>
                 <td>{b.market}</td>
                 <td className="num">{num(b.odds_used)}</td>
+                <td
+                  className={`num ${b.odds_swisslos && b.odds_used && b.odds_swisslos < b.odds_used ? 'muted' : ''}`}
+                  title={b.odds_swisslos && b.odds_used ? `${signed((b.odds_swisslos / b.odds_used - 1) * 100, 1)}% gegenüber Pinnacle` : undefined}
+                >
+                  {num(b.odds_swisslos)}
+                </td>
                 <td>{b.strategy_name}</td>
                 <td className="num">
                   {b.home_score == null ? '—' : `${b.home_score}:${b.away_score}`}
