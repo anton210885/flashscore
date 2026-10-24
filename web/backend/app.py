@@ -17,7 +17,7 @@ os.chdir(ROOT)
 
 from fastapi import FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from database import connect as db_connect, ensure_schema
 from services import web_league_service as svc
@@ -510,4 +510,20 @@ def frontend(full_path: str):
     candidate = os.path.normpath(os.path.join(FRONTEND_DIST, full_path))
     if candidate.startswith(FRONTEND_DIST + os.sep) and os.path.isfile(candidate):
         return FileResponse(candidate)
+    if full_path == "sl" or full_path.startswith("sl/"):
+        return _swisslos_app_index()
     return FileResponse(FRONTEND_INDEX)
+
+
+def _swisslos_app_index() -> HTMLResponse:
+    """Gleiche Oberfläche, aber eigener Name/Symbol/Manifest — iOS legt /sl als eigene App „SL Tipps“ an."""
+    with open(FRONTEND_INDEX, "r", encoding="utf-8") as f:
+        html = f.read()
+    for old, new in (
+        ('href="/manifest.webmanifest"', 'href="/sl-manifest.webmanifest"'),
+        ('href="/apple-touch-icon.png"', 'href="/sl-apple-touch-icon.png"'),
+        ('content="Flashscore" />', 'content="SL Tipps" />'),
+        ("<title>Flashscore Analytics</title>", "<title>SL Tipps</title>"),
+    ):
+        html = html.replace(old, new)
+    return HTMLResponse(html)

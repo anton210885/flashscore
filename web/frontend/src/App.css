@@ -1757,3 +1757,228 @@ code {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* ── Swisslos-App (/sl): Handy-Layout mit Karten und Leiste unten ── */
+.sl-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.sl-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: calc(0.6rem + env(safe-area-inset-top)) 1rem 0.6rem;
+  background: rgba(15, 20, 25, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.sl-title {
+  font-weight: 700;
+  font-size: 1.15rem;
+}
+
+.sl-main {
+  flex: 1;
+  padding: 0.75rem 0.75rem calc(5rem + env(safe-area-inset-bottom));
+}
+
+.sl-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+
+.sl-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.6rem;
+}
+
+.sl-card--bet {
+  border-color: rgba(46, 204, 113, 0.45);
+}
+
+.sl-card-top,
+.sl-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.sl-time {
+  font-family: var(--mono);
+  color: var(--accent);
+}
+
+.sl-league {
+  color: var(--muted);
+  text-align: right;
+}
+
+.sl-teams {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0.3rem 0 0.4rem;
+}
+
+.sl-market {
+  font-weight: 600;
+}
+
+.sl-odds {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.sl-odds small {
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.sl-chip {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  border: 1px solid currentColor;
+}
+
+.sl-actions,
+.sl-place {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  align-items: flex-end;
+}
+
+.sl-place label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.sl-place input {
+  width: 6rem;
+  font-size: 1rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.sl-btn {
+  min-height: 2.6rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-row);
+  color: var(--text);
+  font-size: 0.95rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.sl-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.sl-summary {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.sl-summary-title {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.sl-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  text-align: center;
+}
+
+.sl-summary-grid b {
+  display: block;
+  font-size: 1.1rem;
+}
+
+.sl-summary-grid span {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.sl-empty {
+  text-align: center;
+  margin: 1.5rem 0.5rem;
+}
+
+.sl-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 0.35rem 0 calc(0.35rem + env(safe-area-inset-bottom));
+  background: rgba(22, 29, 39, 0.96);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+}
+
+.sl-tabbar button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.3rem 0;
+  position: relative;
+}
+
+.sl-tabbar button.active {
+  color: var(--accent);
+}
+
+.sl-tab-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.sl-badge {
+  position: absolute;
+  top: 0;
+  left: calc(50% + 0.5rem);
+  min-width: 1.1rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--green);
+  color: #0f1419;
+  font-size: 0.7rem;
+  font-weight: 700;
+}

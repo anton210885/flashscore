@@ -1,0 +1,23 @@
+{
+  "name": "SL Tipps",
+  "short_name": "SL Tipps",
+  "description": "Strategie-Tipps für Swisslos Sporttip, gesetzte Wetten und Bilanz",
+  "start_url": "/sl",
+  "scope": "/sl",
+  "display": "standalone",
+  "background_color": "#0f1419",
+  "theme_color": "#0f1419",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "/sl-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/sl-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

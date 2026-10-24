@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { api } from './api'
 import LeaguesPage from './pages/LeaguesPage'
 import SstatsParamsPage from './pages/SstatsParamsPage'
@@ -10,9 +10,11 @@ import FeaturesPage from './pages/FeaturesPage'
 import SettingsPage from './pages/SettingsPage'
 import VerificationPage from './pages/VerificationPage'
 import AssistantPage from './pages/AssistantPage'
+import SwisslosApp from './pages/SwisslosApp'
 import './App.css'
 
 export default function App() {
+  const { pathname } = useLocation()
   const [health, setHealth] = useState(null)
 
   useEffect(() => {
@@ -21,6 +23,9 @@ export default function App() {
       .then((h) => setHealth(h))
       .catch(() => setHealth(false))
   }, [])
+
+  // Eigene Handy-App ohne Kopfleiste (eigenes Symbol auf dem Home-Bildschirm)
+  if (pathname.startsWith('/sl')) return <SwisslosApp />
 
   return (
     <div className="app">

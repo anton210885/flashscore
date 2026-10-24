@@ -2,49 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import SwisslosBadge from '../components/SwisslosBadge'
 import { strategyTooltipFromSummary } from '../strategyTooltip'
+import { advice, fmtKickoff, num, pinnacleOdds, readSetting, writeSetting } from '../betAdvice'
 
 /** Wett-Assistent: Strategie-Treffer vor Anpfiff mit Swisslos-Quote, Empfehlung und Link.
  * Gesetzt wird selbst in der offiziellen Swisslos-App/-Seite; hier nur markieren. */
-
-function num(v, digits = 2) {
-  if (v == null || v === '') return '—'
-  const n = Number(v)
-  return Number.isFinite(n)
-    ? n.toLocaleString('de-DE', { maximumFractionDigits: digits, minimumFractionDigits: 0 })
-    : '—'
-}
-
-function readSetting(key, fallback) {
-  try {
-    const v = localStorage.getItem(`assistant.${key}`)
-    return v == null ? fallback : JSON.parse(v)
-  } catch {
-    return fallback
-  }
-}
-
-function writeSetting(key, value) {
-  try {
-    localStorage.setItem(`assistant.${key}`, JSON.stringify(value))
-  } catch {
-    // privater Modus o. ä. — Einstellung gilt dann nur bis zum Neuladen
-  }
-}
-
-const fmtKickoff = (d) => String(d || '').slice(0, 16).replace('T', ' ')
-const pinnacleOdds = (b) => b.odds_closing || b.odds_used
-
-/** Empfehlung: setzen, wenn Swisslos-Liga, Quote vorhanden und nicht zu weit unter Pinnacle. */
-function advice(b, maxShortfall) {
-  if (!b.swisslos) return { key: 'no_sl', text: 'Liga nicht bei Swisslos', tone: 'muted' }
-  if (!b.odds_swisslos) return { key: 'no_odds', text: 'Swisslos-Quote fehlt noch', tone: 'muted' }
-  const pin = pinnacleOdds(b)
-  const diff = pin ? (b.odds_swisslos / pin - 1) * 100 : null
-  if (diff != null && diff < -maxShortfall) {
-    return { key: 'low', text: `Quote zu tief (${num(diff, 1)} %)`, tone: 'neg', diff }
-  }
-  return { key: 'bet', text: 'setzen', tone: 'pos', diff }
-}
 
 function notify(title, body) {
   try {
