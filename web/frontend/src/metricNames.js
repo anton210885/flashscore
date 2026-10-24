@@ -69,6 +69,18 @@ export const METRIC_NAMES = {
   rd_away: 'Rating-Unsicherheit (RD) Away',
   vol_home: 'Rating-Volatilität Home',
   vol_away: 'Rating-Volatilität Away',
+  // Power = Ø xG ÷ Ø xGA, Tempo = Ø xG + Ø xGA (Saison bzw. nur Heim-/Auswärtsspiele)
+  power_home: 'Power Home (Saison) xG ÷ xGA',
+  power_away: 'Power Away (Saison) xG ÷ xGA',
+  power_diff: 'Power Home − Away (Saison)',
+  tempo_home: 'Tempo Home (Saison) xG + xGA',
+  tempo_away: 'Tempo Away (Saison) xG + xGA',
+  tempo_sum: 'Tempo Home + Away (Saison)',
+  power_home_venue: 'Power Home (Heimspiele) xG ÷ xGA',
+  power_away_venue: 'Power Away (Auswärtsspiele) xG ÷ xGA',
+  power_diff_venue: 'Power Home − Away (Venue)',
+  tempo_home_venue: 'Tempo Home (Heimspiele) xG + xGA',
+  tempo_away_venue: 'Tempo Away (Auswärtsspiele) xG + xGA',
 }
 
 export function metricName(key, fallback) {

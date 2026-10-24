@@ -177,6 +177,61 @@ const CORR_METRIC_HELP_RAW = [
     label: 'awayteam_pred_xg',
     text: 'Venue-Pred: (awayteam_away_xg + hometeam_home_xga) / 2.',
   },
+  {
+    key: 'power_home',
+    label: 'power_home',
+    text: 'Ø xG ÷ Ø xGA des Heimteams (alle Saisonspiele). Über 1 = erzeugt mehr Chancen als es zulässt.',
+  },
+  {
+    key: 'power_away',
+    label: 'power_away',
+    text: 'Ø xG ÷ Ø xGA des Gastteams (alle Saisonspiele). Über 1 = erzeugt mehr Chancen als es zulässt.',
+  },
+  {
+    key: 'power_diff',
+    label: 'power_diff',
+    text: 'Power Home − Power Away. Positiv = Heimteam laut Chancenverhältnis stärker, negativ = Gast stärker.',
+  },
+  {
+    key: 'tempo_home',
+    label: 'tempo_home',
+    text: 'Ø xG + Ø xGA des Heimteams: Chancen pro Spiel insgesamt — hoch = offene Spiele.',
+  },
+  {
+    key: 'tempo_away',
+    label: 'tempo_away',
+    text: 'Ø xG + Ø xGA des Gastteams: Chancen pro Spiel insgesamt — hoch = offene Spiele.',
+  },
+  {
+    key: 'tempo_sum',
+    label: 'tempo_sum',
+    text: 'Tempo Home + Tempo Away — erwartete Offenheit des Spiels (interessant für Over/Under).',
+  },
+  {
+    key: 'power_home_venue',
+    label: 'power_home_venue',
+    text: 'Wie Power Home, aber nur Heimspiele des Heimteams.',
+  },
+  {
+    key: 'power_away_venue',
+    label: 'power_away_venue',
+    text: 'Wie Power Away, aber nur Auswärtsspiele des Gastteams.',
+  },
+  {
+    key: 'power_diff_venue',
+    label: 'power_diff_venue',
+    text: 'Power Home (Heimspiele) − Power Away (Auswärtsspiele).',
+  },
+  {
+    key: 'tempo_home_venue',
+    label: 'tempo_home_venue',
+    text: 'Wie Tempo Home, aber nur Heimspiele des Heimteams.',
+  },
+  {
+    key: 'tempo_away_venue',
+    label: 'tempo_away_venue',
+    text: 'Wie Tempo Away, aber nur Auswärtsspiele des Gastteams.',
+  },
 ]
 
 export const CORR_RULE_HELP = [

@@ -9,6 +9,7 @@ function num(v, digits = 2) {
 }
 
 const diff = (a, b) => (a == null || b == null ? null : Number(a) - Number(b))
+const sum = (a, b) => (a == null || b == null ? null : Number(a) + Number(b))
 const ratio = (a, b) => (a == null || b == null || Number(b) === 0 ? null : Number(a) / Number(b))
 const pct = (v) => (v == null ? '—' : `${num(Number(v) > 1 ? v : Number(v) * 100, 1)} %`)
 
@@ -49,6 +50,8 @@ function venueRows(r, team) {
     ['Ø xGA', v('home', 'xga'), v('away', 'xga')],
     ['Ø Tore', v('home', 'gf'), v('away', 'gf')],
     ['Ø Gegentore', v('home', 'ga'), v('away', 'ga')],
+    ['Power xG ÷ xGA', ratio(v('home', 'xg'), v('home', 'xga')), ratio(v('away', 'xg'), v('away', 'xga'))],
+    ['Tempo xG + xGA', sum(v('home', 'xg'), v('home', 'xga')), sum(v('away', 'xg'), v('away', 'xga'))],
   ]
 }
 
@@ -107,6 +110,8 @@ export default function MatchParamsPanel({ row: r, onClose }) {
             ['Ø xGA', r.form2_home_avg_xga, r.form2_away_avg_xga],
             ['Ø Tore', r.form2_home_avg_gf, r.form2_away_avg_gf],
             ['Ø Gegentore', r.form2_home_avg_ga, r.form2_away_avg_ga],
+            ['Power xG ÷ xGA', ratio(r.form2_home_avg_xg, r.form2_home_avg_xga), ratio(r.form2_away_avg_xg, r.form2_away_avg_xga), 3],
+            ['Tempo xG + xGA', sum(r.form2_home_avg_xg, r.form2_home_avg_xga), sum(r.form2_away_avg_xg, r.form2_away_avg_xga)],
           ]}
         />
         <PairTable

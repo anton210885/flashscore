@@ -63,6 +63,17 @@ PREMATCH_PERCENTILE_METRICS = (
     "awayteam_away_ga",
     "hometeam_pred_xg",
     "awayteam_pred_xg",
+    "power_home",
+    "power_away",
+    "power_diff",
+    "tempo_home",
+    "tempo_away",
+    "tempo_sum",
+    "power_home_venue",
+    "power_away_venue",
+    "power_diff_venue",
+    "tempo_home_venue",
+    "tempo_away_venue",
 )
 
 PERCENTILE_METRIC_LABELS = {
@@ -786,6 +797,8 @@ def _comparison_attr_value(key: Any, ctx: Dict[str, Any]) -> Optional[float]:
         "hometeam_pred_xg": ctx.get("hometeam_pred_xg"),
         "awayteam_pred_xg": ctx.get("awayteam_pred_xg"),
     }
+    if k in POWER_TEMPO_METRICS:
+        return power_tempo_value(ctx, k)
     if k in mapping:
         return _f(mapping[k])
     # Fallback: Key direkt im Kontext (Row-Keys)
@@ -1356,7 +1369,45 @@ def results_to_csv_rows(results: List[Dict[str, Any]]) -> List[List[Any]]:
     return rows
 
 
+# Power = Ø xG ÷ Ø xGA (Chancen erzeugt im Verhältnis zu zugelassenen; > 1 = mehr erzeugt als zugelassen)
+# Tempo = Ø xG + Ø xGA (Chancen pro Spiel insgesamt — wie offen die Spiele des Teams sind)
+# Saison = alle Spiele; Venue = Heimteam nur Heimspiele, Gast nur Auswärtsspiele.
+# Felder heißen in Ergebnis-Zeilen, bevorstehenden Spielen und Vergleichs-Kontext gleich.
+_POWER_TEMPO_PARTS = {
+    "power_home": ("form2_home_avg_xg", "form2_home_avg_xga", "/"),
+    "power_away": ("form2_away_avg_xg", "form2_away_avg_xga", "/"),
+    "tempo_home": ("form2_home_avg_xg", "form2_home_avg_xga", "+"),
+    "tempo_away": ("form2_away_avg_xg", "form2_away_avg_xga", "+"),
+    "power_home_venue": ("hometeam_home_xg", "hometeam_home_xga", "/"),
+    "power_away_venue": ("awayteam_away_xg", "awayteam_away_xga", "/"),
+    "tempo_home_venue": ("hometeam_home_xg", "hometeam_home_xga", "+"),
+    "tempo_away_venue": ("awayteam_away_xg", "awayteam_away_xga", "+"),
+}
+_POWER_TEMPO_COMBINED = {
+    "power_diff": ("power_home", "power_away", "-"),
+    "power_diff_venue": ("power_home_venue", "power_away_venue", "-"),
+    "tempo_sum": ("tempo_home", "tempo_away", "+"),
+}
+POWER_TEMPO_METRICS = (*_POWER_TEMPO_PARTS, *_POWER_TEMPO_COMBINED)
+
+
+def power_tempo_value(d: Dict[str, Any], metric: str) -> Optional[float]:
+    if metric in _POWER_TEMPO_COMBINED:
+        a_key, b_key, op = _POWER_TEMPO_COMBINED[metric]
+        a, b = power_tempo_value(d, a_key), power_tempo_value(d, b_key)
+    else:
+        a_key, b_key, op = _POWER_TEMPO_PARTS[metric]
+        a, b = _f(d.get(a_key)), _f(d.get(b_key))
+    if a is None or b is None:
+        return None
+    if op == "/":
+        return a / b if b > 0 else None
+    return a + b if op == "+" else a - b
+
+
 def _metric_value(row: Dict[str, Any], metric: str) -> Optional[float]:
+    if metric in POWER_TEMPO_METRICS:
+        return power_tempo_value(row, metric)
     if metric == "chance":
         return normalize_chance(row.get("chance"))
     if metric == "odds":
@@ -1544,6 +1595,17 @@ RANKABLE_METRICS = (
     "awayteam_away_ga",
     "hometeam_pred_xg",
     "awayteam_pred_xg",
+    "power_home",
+    "power_away",
+    "power_diff",
+    "tempo_home",
+    "tempo_away",
+    "tempo_sum",
+    "power_home_venue",
+    "power_away_venue",
+    "power_diff_venue",
+    "tempo_home_venue",
+    "tempo_away_venue",
 )
 
 METRIC_DESCRIPTIONS = {
@@ -1664,6 +1726,17 @@ METRIC_DESCRIPTIONS = {
     "draw_quote": "Closing-/gewählte Draw-Quote (X) des Spiels.",
     "over_25_quote": "Quote Over 2.5 des Spiels.",
     "under_25_quote": "Quote Under 2.5 des Spiels.",
+    "power_home": "Ø xG ÷ Ø xGA des Heimteams (alle Saisonspiele). Über 1 = erzeugt mehr Chancen als es zulässt.",
+    "power_away": "Ø xG ÷ Ø xGA des Gastteams (alle Saisonspiele). Über 1 = erzeugt mehr Chancen als es zulässt.",
+    "power_diff": "Power Home − Power Away. Positiv = Heimteam laut Chancenverhältnis stärker, negativ = Gast stärker.",
+    "tempo_home": "Ø xG + Ø xGA des Heimteams: Chancen pro Spiel insgesamt — hoch = offene Spiele.",
+    "tempo_away": "Ø xG + Ø xGA des Gastteams: Chancen pro Spiel insgesamt — hoch = offene Spiele.",
+    "tempo_sum": "Tempo Home + Tempo Away — erwartete Offenheit des Spiels (interessant für Over/Under).",
+    "power_home_venue": "Wie Power Home, aber nur Heimspiele des Heimteams.",
+    "power_away_venue": "Wie Power Away, aber nur Auswärtsspiele des Gastteams.",
+    "power_diff_venue": "Power Home (Heimspiele) − Power Away (Auswärtsspiele).",
+    "tempo_home_venue": "Wie Tempo Home, aber nur Heimspiele des Heimteams.",
+    "tempo_away_venue": "Wie Tempo Away, aber nur Auswärtsspiele des Gastteams.",
 }
 
 RULE_DESCRIPTIONS = {
@@ -1744,6 +1817,17 @@ METRIC_DISPLAY_NAMES = {
     "rd_away": "Rating-Unsicherheit (RD) Away",
     "vol_home": "Rating-Volatilität Home",
     "vol_away": "Rating-Volatilität Away",
+    "power_home": "Power Home (Saison) xG ÷ xGA",
+    "power_away": "Power Away (Saison) xG ÷ xGA",
+    "power_diff": "Power Home − Away (Saison)",
+    "tempo_home": "Tempo Home (Saison) xG + xGA",
+    "tempo_away": "Tempo Away (Saison) xG + xGA",
+    "tempo_sum": "Tempo Home + Away (Saison)",
+    "power_home_venue": "Power Home (Heimspiele) xG ÷ xGA",
+    "power_away_venue": "Power Away (Auswärtsspiele) xG ÷ xGA",
+    "power_diff_venue": "Power Home − Away (Venue)",
+    "tempo_home_venue": "Tempo Home (Heimspiele) xG + xGA",
+    "tempo_away_venue": "Tempo Away (Auswärtsspiele) xG + xGA",
 }
 PERCENTILE_METRIC_LABELS.update(METRIC_DISPLAY_NAMES)
 
@@ -1903,6 +1987,17 @@ BUCKET_METRICS = (
     "awayteam_pred_xg",
     "over_25_quote",
     "under_25_quote",
+    "power_home",
+    "power_away",
+    "power_diff",
+    "tempo_home",
+    "tempo_away",
+    "tempo_sum",
+    "power_home_venue",
+    "power_away_venue",
+    "power_diff_venue",
+    "tempo_home_venue",
+    "tempo_away_venue",
 )
 
 
@@ -2102,6 +2197,12 @@ OPTIMIZE_METRICS = (
     "xg_form2_sum",
     "chance",
     "xroi_pct",
+    "power_home",
+    "power_away",
+    "power_diff",
+    "tempo_home",
+    "tempo_away",
+    "tempo_sum",
 )
 
 # Metric → (filter_min_key, filter_max_key)

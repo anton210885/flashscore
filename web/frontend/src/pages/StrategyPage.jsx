@@ -186,6 +186,17 @@ const CMP_ATTRS = withMetricNames([
   { value: 'awayteam_away_ga', label: 'awayteam_away_ga' },
   { value: 'hometeam_pred_xg', label: 'hometeam_pred_xg' },
   { value: 'awayteam_pred_xg', label: 'awayteam_pred_xg' },
+  { value: 'power_home', label: 'power_home' },
+  { value: 'power_away', label: 'power_away' },
+  { value: 'power_diff', label: 'power_diff' },
+  { value: 'tempo_home', label: 'tempo_home' },
+  { value: 'tempo_away', label: 'tempo_away' },
+  { value: 'tempo_sum', label: 'tempo_sum' },
+  { value: 'power_home_venue', label: 'power_home_venue' },
+  { value: 'power_away_venue', label: 'power_away_venue' },
+  { value: 'power_diff_venue', label: 'power_diff_venue' },
+  { value: 'tempo_home_venue', label: 'tempo_home_venue' },
+  { value: 'tempo_away_venue', label: 'tempo_away_venue' },
 ])
 
 const PCT_METRICS = withMetricNames([
@@ -221,6 +232,17 @@ const PCT_METRICS = withMetricNames([
   { value: 'odds', label: 'Quote' },
   { value: 'xroi_pct', label: 'xROI %' },
   { value: 'profit', label: 'Profit (Look-ahead!)' },
+  { value: 'power_home', label: 'power_home' },
+  { value: 'power_away', label: 'power_away' },
+  { value: 'power_diff', label: 'power_diff' },
+  { value: 'tempo_home', label: 'tempo_home' },
+  { value: 'tempo_away', label: 'tempo_away' },
+  { value: 'tempo_sum', label: 'tempo_sum' },
+  { value: 'power_home_venue', label: 'power_home_venue' },
+  { value: 'power_away_venue', label: 'power_away_venue' },
+  { value: 'power_diff_venue', label: 'power_diff_venue' },
+  { value: 'tempo_home_venue', label: 'tempo_home_venue' },
+  { value: 'tempo_away_venue', label: 'tempo_away_venue' },
 ])
 
 const EMPTY_CMP = {
@@ -277,6 +299,17 @@ const BUCKET_METRICS = withMetricNames([
   { value: 'awayteam_pred_xg', label: 'awayteam_pred_xg' },
   { value: 'chance', label: 'Chance' },
   { value: 'xroi_pct', label: 'xROI %' },
+  { value: 'power_home', label: 'power_home' },
+  { value: 'power_away', label: 'power_away' },
+  { value: 'power_diff', label: 'power_diff' },
+  { value: 'tempo_home', label: 'tempo_home' },
+  { value: 'tempo_away', label: 'tempo_away' },
+  { value: 'tempo_sum', label: 'tempo_sum' },
+  { value: 'power_home_venue', label: 'power_home_venue' },
+  { value: 'power_away_venue', label: 'power_away_venue' },
+  { value: 'power_diff_venue', label: 'power_diff_venue' },
+  { value: 'tempo_home_venue', label: 'tempo_home_venue' },
+  { value: 'tempo_away_venue', label: 'tempo_away_venue' },
 ])
 
 const DEFAULTS = {
