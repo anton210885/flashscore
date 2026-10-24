@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from services import strategy_service as strat
+from services import swisslos_service as swisslos
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS verification_bets (
@@ -285,7 +286,9 @@ def report(
         {k: r[k] for k in r.keys() if k != "filters_json"}
         for r in conn.execute(f"SELECT * FROM verification_bets {where} ORDER BY date ASC, strategy_name ASC", params)
     ]
+    league_of = swisslos.league_ids_for_games(conn, (b["game_id"] for b in bets))
     for b in bets:
+        b["swisslos"] = swisslos.is_swisslos(league_of.get(int(b["game_id"])))
         b["odds_used"] = (
             (b["odds_opening"] if b["odds_type"] == "opening" else b["odds_closing"]) or b["odds_first"]
         )

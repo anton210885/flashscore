@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import ProfitChart from '../components/ProfitChart'
+import SwisslosBadge from '../components/SwisslosBadge'
 
 function num(v, digits = 2) {
   if (v == null || v === '') return '—'
@@ -105,6 +106,13 @@ export default function VerificationPage() {
   const [strategy, setStrategy] = useState('')
   const [status, setStatus] = useState('offen')
   const [market, setMarket] = useState('')
+  const [onlySwisslos, setOnlySwisslos] = useState(() => {
+    try {
+      return localStorage.getItem('verification.onlySwisslos') === '1'
+    } catch {
+      return false
+    }
+  })
   const [auto, setAuto] = useState(true)
   const [sortBy, setSortBy] = useState('date_asc')
 
@@ -149,10 +157,21 @@ export default function VerificationPage() {
       .finally(() => setScanning(false))
   }
 
-  // Markt-Filter gilt für alles; Strategie/Status nur für die Wetten-Liste
+  useEffect(() => {
+    try {
+      localStorage.setItem('verification.onlySwisslos', onlySwisslos ? '1' : '0')
+    } catch {
+      /* Speicher nicht verfügbar */
+    }
+  }, [onlySwisslos])
+
+  // Markt- und Swisslos-Filter gelten für alles; Strategie/Status nur für die Wetten-Liste
   const marketBets = useMemo(
-    () => (data?.bets || []).filter((b) => !market || b.market === market),
-    [data, market],
+    () =>
+      (data?.bets || []).filter(
+        (b) => (!market || b.market === market) && (!onlySwisslos || b.swisslos),
+      ),
+    [data, market, onlySwisslos],
   )
   const summary = useMemo(() => {
     const backtest = Object.fromEntries((data?.summary || []).map((s) => [s.strategy_id, s]))
@@ -218,6 +237,10 @@ export default function VerificationPage() {
               </option>
             ))}
           </select>
+        </label>
+        <label className="chk" title="Nur Spiele aus Ligen, die Swisslos Sporttip anbietet">
+          <input type="checkbox" checked={onlySwisslos} onChange={(e) => setOnlySwisslos(e.target.checked)} />
+          nur Swisslos
         </label>
         <span>
           Gesamt: <strong>{total.bets}</strong> Wetten · {total.open} offen ·{' '}
@@ -372,7 +395,10 @@ export default function VerificationPage() {
               <tr key={b.id}>
                 <td>{fmtDate(b.date)}</td>
                 <td>{b.country || '—'}</td>
-                <td>{b.league || '—'}</td>
+                <td>
+                  {b.league || '—'}
+                  {b.swisslos ? <SwisslosBadge /> : null}
+                </td>
                 <td>{b.home}</td>
                 <td>{b.away}</td>
                 <td>{b.market}</td>

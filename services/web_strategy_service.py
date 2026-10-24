@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from services import strategy_service as strat
+from services import swisslos_service as swisslos
 
 DB_PATH = "data/flashscore.db"
 
@@ -1014,6 +1015,7 @@ def find_upcoming(filters: Dict[str, Any], *, limit: int = 200) -> Dict[str, Any
                     "away": rd.get("away_team_name"),
                     "league": rd.get("league_name"),
                     "country": rd.get("country_name"),
+                    "swisslos": swisslos.is_swisslos(rd.get("league_id")),
                     "market": market,
                     "odds": odds,
                     "odds_opening": o_open,
@@ -1151,6 +1153,7 @@ def presets_upcoming(presets: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "date": x.get("date"),
                     "country": x.get("country"),
                     "league": x.get("league"),
+                    "swisslos": bool(x.get("swisslos")),
                     "home": x.get("home"),
                     "away": x.get("away"),
                     "market": x.get("market"),

@@ -15,6 +15,7 @@ import {
   LabelList,
 } from 'recharts'
 import { api } from '../api'
+import SwisslosBadge from '../components/SwisslosBadge'
 import { loadStrategyResults, saveStrategyResults } from '../strategyResultsStore'
 import {
   listStrategyPresets,
@@ -972,7 +973,10 @@ export default function StrategyPage() {
                       >
                         <td>{String(g.date || '').slice(0, 16).replace('T', ' ')}</td>
                         <td>{g.country || '—'}</td>
-                        <td>{g.league || '—'}</td>
+                        <td>
+                          {g.league || '—'}
+                          {g.swisslos ? <SwisslosBadge /> : null}
+                        </td>
                         <td>{g.home}</td>
                         <td>{g.away}</td>
                         <td>{g.market}</td>
@@ -2124,7 +2128,10 @@ export default function StrategyPage() {
                         <td>{r.home}</td>
                         <td>{r.away}</td>
                         <td>{r.country || '—'}</td>
-                        <td>{r.league || '—'}</td>
+                        <td>
+                          {r.league || '—'}
+                          {r.swisslos ? <SwisslosBadge /> : null}
+                        </td>
                         <td className="num">{num(r.rating_h, 0)}</td>
                         <td className="num">{num(r.rating_a, 0)}</td>
                         <td className="num">{num(r.xg_glicko_h)}</td>
