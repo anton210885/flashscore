@@ -68,6 +68,7 @@ app.add_middleware(
 mimetypes.add_type("application/javascript", ".js")
 mimetypes.add_type("text/css", ".css")
 mimetypes.add_type("image/svg+xml", ".svg")
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 FRONTEND_DIST = os.path.join(ROOT, "web", "frontend", "dist")
 FRONTEND_INDEX = os.path.join(FRONTEND_DIST, "index.html")

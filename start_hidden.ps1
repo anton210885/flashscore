@@ -7,6 +7,8 @@ $root = $PSScriptRoot
 Set-Location $root
 
 $url = "http://127.0.0.1:8000"
+# 0.0.0.0 = auch im Heimnetz erreichbar (iPhone: http://<PC-IP>:8000). Nur dieser PC: FLASHSCORE_HOST=127.0.0.1
+$listenHost = if ($env:FLASHSCORE_HOST) { $env:FLASHSCORE_HOST } else { "0.0.0.0" }
 $logDir = Join-Path $root "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
@@ -35,7 +37,7 @@ if (-not (Test-Api)) {
     }
     $env:PYTHONUNBUFFERED = "1"
     Start-Process -FilePath $python `
-        -ArgumentList "-m", "uvicorn", "web.backend.app:app", "--host", "127.0.0.1", "--port", "8000", "--ws", "none" `
+        -ArgumentList "-m", "uvicorn", "web.backend.app:app", "--host", $listenHost, "--port", "8000", "--ws", "none" `
         -WorkingDirectory $root -WindowStyle Hidden `
         -RedirectStandardOutput (Join-Path $logDir "uvicorn.log") `
         -RedirectStandardError (Join-Path $logDir "uvicorn.log.err")
