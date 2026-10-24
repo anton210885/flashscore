@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import SwisslosBadge from '../components/SwisslosBadge'
+import { strategyTooltipFromSummary } from '../strategyTooltip'
 
 /** Wett-Assistent: Strategie-Treffer vor Anpfiff mit Swisslos-Quote, Empfehlung und Link.
  * Gesetzt wird selbst in der offiziellen Swisslos-App/-Seite; hier nur markieren. */
@@ -137,6 +138,7 @@ export default function AssistantPage() {
 
   const unplace = (id) => api.verificationUnplaced(id).then(load).catch((e) => setError(e.message))
 
+  const summaryById = useMemo(() => Object.fromEntries((data?.summary || []).map((s) => [s.strategy_id, s])), [data])
   const toBet = rows.filter((b) => b.advice.key === 'bet' && !b.placed).length
   const placedOpen = rows.filter((b) => b.placed)
   const stakeOpen = placedOpen.reduce((s, b) => s + (Number(b.placed.stake) || 0), 0)
@@ -229,7 +231,9 @@ export default function AssistantPage() {
                 <td>{b.home}</td>
                 <td>{b.away}</td>
                 <td>{b.market}</td>
-                <td>{b.strategy_name}</td>
+                <td className="has-tooltip" title={strategyTooltipFromSummary(b.strategy_name, summaryById[b.strategy_id])}>
+                  {b.strategy_name}
+                </td>
                 <td className="num">{num(pinnacleOdds(b))}</td>
                 <td className="num">
                   <strong>{num(b.odds_swisslos)}</strong>

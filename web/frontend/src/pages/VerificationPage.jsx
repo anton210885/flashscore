@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import ProfitChart from '../components/ProfitChart'
 import SwisslosBadge from '../components/SwisslosBadge'
+import { strategyTooltipFromSummary } from '../strategyTooltip'
 
 function num(v, digits = 2) {
   if (v == null || v === '') return '—'
@@ -232,6 +233,8 @@ export default function VerificationPage() {
     return [...rows].sort(SORTS[sortBy])
   }, [marketBets, strategy, status, sortBy])
   const selection = useMemo(() => aggregate(bets), [bets])
+  // Hover-Text: Kennzahlen der ganzen Strategie (Server-Zusammenfassung, unabhängig von Filtern)
+  const summaryById = useMemo(() => Object.fromEntries((data?.summary || []).map((s) => [s.strategy_id, s])), [data])
 
   return (
     <div className="main strategy-page verification-page">
@@ -371,7 +374,9 @@ export default function VerificationPage() {
                     onClick={() => setStrategy(strategy === s.strategy_id ? '' : s.strategy_id)}
                     title="Klick → nur diese Strategie anzeigen"
                   >
-                    <td>{strategy === s.strategy_id ? <strong>{s.strategy}</strong> : s.strategy}</td>
+                    <td className="has-tooltip" title={strategyTooltipFromSummary(s.strategy, summaryById[s.strategy_id])}>
+                      {strategy === s.strategy_id ? <strong>{s.strategy}</strong> : s.strategy}
+                    </td>
                     <td className="num">{num(bt.n_bets ?? s.backtest_n, 0)}</td>
                     <td className={`num ${tone(bt.profit)}`}>{signed(bt.profit)}</td>
                     <td className={`num ${tone(bt.roi_pct ?? s.backtest_roi)}`}>{signed(bt.roi_pct ?? s.backtest_roi, 1)}</td>
@@ -489,7 +494,9 @@ export default function VerificationPage() {
                     {num(b.odds_swisslos)}
                   </td>
                 )}
-                <td>{b.strategy_name}</td>
+                <td className="has-tooltip" title={strategyTooltipFromSummary(b.strategy_name, summaryById[b.strategy_id])}>
+                  {b.strategy_name}
+                </td>
                 <td className="num">
                   {b.home_score == null ? '—' : `${b.home_score}:${b.away_score}`}
                 </td>

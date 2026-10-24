@@ -1091,6 +1091,8 @@ def history_stats(m: Dict[str, Any]) -> Dict[str, Any]:
         "median_winning_streak": m.get("median_winning_streak"),
         "n_losing_streaks": int(m.get("n_losing_streaks") or 0),
         "n_winning_streaks": int(m.get("n_winning_streaks") or 0),
+        "current_losing_streak": int(m.get("current_losing_streak") or 0),
+        "current_winning_streak": int(m.get("current_winning_streak") or 0),
     }
 
 

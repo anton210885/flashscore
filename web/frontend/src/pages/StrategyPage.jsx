@@ -26,6 +26,7 @@ import {
 } from '../strategyPresetsStore'
 import { metricName, withMetricNames } from '../metricNames'
 import MatchParamsPanel from '../components/MatchParamsPanel'
+import { strategyTooltipFromHistory } from '../strategyTooltip'
 import {
   ANALYSE_HELP_TITLE,
   CORR_COLUMN_MAP,
@@ -885,7 +886,7 @@ export default function StrategyPage() {
                       style={{ cursor: 'pointer' }}
                       onClick={() => openPresetFromUpcomingScan(r.id)}
                     >
-                      <td>{r.name}</td>
+                      <td className="has-tooltip" title={strategyTooltipFromHistory(r.name, r.history)}>{r.name}</td>
                       <td className="num">
                         {r.skipped ? '—' : <strong>{r.n}</strong>}
                       </td>
@@ -981,7 +982,9 @@ export default function StrategyPage() {
                         <td>{g.away}</td>
                         <td>{g.market}</td>
                         <td className="num">{oddsNum(g.odds)}</td>
-                        <td>{g.strategy}</td>
+                        <td className="has-tooltip" title={strategyTooltipFromHistory(g.strategy, presetUpcomingMap[g.strategy_id]?.history)}>
+                          {g.strategy}
+                        </td>
                         <td className={`num ${g.losing_streak > 0 ? 'neg' : ''}`}>{num(g.losing_streak, 0)}</td>
                         <td className={`num ${g.winning_streak > 0 ? 'pos' : ''}`}>{num(g.winning_streak, 0)}</td>
                       </tr>
