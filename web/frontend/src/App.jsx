@@ -17,7 +17,7 @@ export default function App() {
   useEffect(() => {
     api
       .health()
-      .then(() => setHealth(true))
+      .then((h) => setHealth(h))
       .catch(() => setHealth(false))
   }, [])
 
@@ -38,6 +38,12 @@ export default function App() {
         </nav>
         <div className={`status ${health ? 'ok' : ''}`}>
           {health === null ? 'API…' : health ? 'API online' : 'API offline – Backend starten'}
+          {health?.version ? (
+            <span className="app-version" title={`Stand: ${health.commit_date || '—'}`}>
+              {' · '}
+              {health.version}
+            </span>
+          ) : null}
         </div>
       </header>
 

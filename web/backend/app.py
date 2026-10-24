@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import subprocess
 import sys
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
@@ -83,6 +84,21 @@ def root():
     }
 
 
+def _git(*args: str) -> str:
+    try:
+        out = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, timeout=5)
+        return out.stdout.strip() if out.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+# Version beim API-Start aus Git: letzter Tag + Commits danach + Commit-ID, z. B. v1.0.0-17-g28d20ca
+APP_VERSION = {
+    "version": _git("describe", "--tags", "--always") or "unbekannt",
+    "commit_date": _git("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M"),
+}
+
+
 @app.get("/api/health")
 def health():
     db_path = os.path.join(ROOT, "data", "flashscore.db")
@@ -92,6 +108,7 @@ def health():
         "db_exists": os.path.exists(db_path),
         "db_size_mb": round(os.path.getsize(db_path) / (1024 * 1024), 1) if os.path.exists(db_path) else 0,
         "pipeline": pipeline_status_brief(),
+        **APP_VERSION,
     }
 
 

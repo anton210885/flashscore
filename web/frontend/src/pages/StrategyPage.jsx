@@ -24,6 +24,7 @@ import {
   syncStrategyPresets,
 } from '../strategyPresetsStore'
 import { metricName, withMetricNames } from '../metricNames'
+import MatchParamsPanel from '../components/MatchParamsPanel'
 import {
   ANALYSE_HELP_TITLE,
   CORR_COLUMN_MAP,
@@ -437,6 +438,7 @@ export default function StrategyPage() {
   const [presetUpcomingLoading, setPresetUpcomingLoading] = useState(false)
   const [presetUpcomingOpen, setPresetUpcomingOpen] = useState(false)
   const [presetUpcomingGames, setPresetUpcomingGames] = useState([])
+  const [pastDetail, setPastDetail] = useState(null)
 
   useEffect(() => {
     const prev = loadStrategyResults()
@@ -1979,6 +1981,8 @@ export default function StrategyPage() {
             {data.truncated ? (
               <p className="muted">Tabelle auf {data.results.length} Zeilen begrenzt (gesamt {data.n}).</p>
             ) : null}
+            <p className="muted">Zeile anklicken → alle Parameter des Spiels.</p>
+            <MatchParamsPanel row={pastDetail} onClose={() => setPastDetail(null)} />
             <div className="table-wrap">
               <table>
                 <thead>
@@ -1992,6 +1996,8 @@ export default function StrategyPage() {
                     <th className="num">Rating A</th>
                     <th className="num">xG Gl H</th>
                     <th className="num">xG Gl A</th>
+                    <th className="num" title="xG Saison Home (früher Form2)">xG Sa H</th>
+                    <th className="num" title="xG Saison Away (früher Form2)">xG Sa A</th>
                     <th className="num">xG Ma H</th>
                     <th className="num">xG Ma A</th>
                     <th>Markt</th>
@@ -2005,7 +2011,12 @@ export default function StrategyPage() {
                 </thead>
                 <tbody>
                   {(data.results || []).map((r, i) => (
-                    <tr key={`${r.game_id}-${r.market}-${i}`}>
+                    <tr
+                      key={`${r.game_id}-${r.market}-${i}`}
+                      style={{ cursor: 'pointer' }}
+                      className={pastDetail === r ? 'row-selected' : ''}
+                      onClick={() => setPastDetail(pastDetail === r ? null : r)}
+                    >
                       <td>{String(r.date || '').slice(0, 10)}</td>
                       <td>{r.home}</td>
                       <td>{r.away}</td>
@@ -2015,6 +2026,8 @@ export default function StrategyPage() {
                       <td className="num">{num(r.rating_a, 0)}</td>
                       <td className="num">{num(r.xg_glicko_h)}</td>
                       <td className="num">{num(r.xg_glicko_a)}</td>
+                      <td className="num">{num(r.xg_form2_h)}</td>
+                      <td className="num">{num(r.xg_form2_a)}</td>
                       <td className="num">{num(r.xg_h ?? r.xg_match_h)}</td>
                       <td className="num">{num(r.xg_a ?? r.xg_match_a)}</td>
                       <td>{r.market}</td>
