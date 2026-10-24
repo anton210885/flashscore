@@ -114,10 +114,33 @@ class SStatsClient:
 
         Uses `/Games/list` endpoint from SStats OpenAPI. If the API returns the
         standard `ApiResponse` wrapper, the list is returned from `data`.
+
+        Die API liefert höchstens 1000 Spiele pro Abfrage. Ohne eigenes `Offset`/`Limit`
+        wird darum weitergeblättert, bis eine Seite kürzer ist (sonst fehlen z.B. an vollen
+        Samstagen die Abendspiele in der Today-Liste).
         """
+        query = dict(params or {})
+        if any(k.lower() in ("offset", "limit") for k in query):
+            return self._get_games_page(query)
+
+        out: List[Dict[str, Any]] = []
+        seen: set = set()
+        offset = 0
+        while True:
+            page = self._get_games_page({**query, "Offset": offset})
+            new = [g for g in page if not isinstance(g, dict) or g.get("id") not in seen]
+            seen.update(g.get("id") for g in new if isinstance(g, dict))
+            out.extend(new)
+            if len(page) < self.GAMES_PAGE_SIZE or not new:
+                return out
+            offset += len(page)
+
+    GAMES_PAGE_SIZE = 1000
+
+    def _get_games_page(self, query: Dict[str, Any]) -> List[Dict[str, Any]]:
         url = f"{self.base_url}/games/list"
         # API expects API key as query param `apikey` according to OpenAPI
-        query = dict(params or {})
+        query = dict(query)
         if self.api_key:
             query.setdefault("apikey", self.api_key)
 
