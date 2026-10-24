@@ -318,8 +318,6 @@ def analyze(
             "p_draw": rd.get("draw_probability"),
             "p_away": rd.get("away_win_probability"),
         }
-        if not strat.passes_ft_outcome(filters, home_score, away_score):
-            continue
         for market in markets:
             odds = strat.pick_odds(rd, market, odds_type)
             if odds is None or odds <= 1.0:
@@ -347,8 +345,6 @@ def analyze(
             o_close = strat.pick_odds(rd, market, "closing")
             xroi_pct = strat.compute_xroi_pct(o_open, o_close)
             if not strat.passes_xroi_range(filters, xroi_pct):
-                continue
-            if not strat.passes_bet_roi_range(filters, profit):
                 continue
             results.append(
                 {
@@ -440,7 +436,8 @@ def analyze(
         "n_before": n_before_pct,
         "n_after": n_before_pct,
     }
-    if filters.get("use_percentile"):
+    # Perzentil auf Profit wäre ein Blick in die Zukunft — wird ignoriert
+    if filters.get("use_percentile") and str(filters.get("percentile_metric") or "chance") != "profit":
         try:
             pct = float(filters.get("percentile_value") or 10)
         except (TypeError, ValueError):
@@ -455,7 +452,6 @@ def analyze(
             "threshold": thr,
             "n_before": n_before_pct,
             "n_after": len(results),
-            "look_ahead": metric == "profit",
         }
 
     metrics = strat.compute_strategy_metrics(results)
@@ -506,27 +502,6 @@ def analyze(
             "skipped": True,
             "skip_reason": "metric_rank_only",
             "message": "Upcoming bei Metric-Ranking übersprungen.",
-        }
-        return out
-    # Upcoming nur ohne Look-ahead-Filter (FT-Ergebnis / Einzelwetten-ROI)
-    if strat.upcoming_blocked_by_lookahead(filters):
-        if strat.bet_roi_filter_active(filters):
-            reason = "roi"
-            msg = "Bevorstehende Spiele ausgeblendet: ROI-Filter braucht Settlement (Endstand)."
-        else:
-            reason = "ft_outcome"
-            msg = (
-                "Bevorstehende Spiele ausgeblendet: Ergebnis-Filter (Home/Draw/Away/O-U) braucht Endstand."
-            )
-        out["upcoming"] = {
-            "ok": True,
-            "matches": [],
-            "n": 0,
-            "xroi_n": 0,
-            "skipped": True,
-            "skip_reason": reason,
-            "error": None,
-            "message": msg,
         }
         return out
     try:
@@ -793,21 +768,6 @@ def metric_buckets(
 
 def find_upcoming(filters: Dict[str, Any], *, limit: int = 200) -> Dict[str, Any]:
     """Bevorstehende Spiele, die zu den Strategie-Filtern passen (+ Open/Close/xROI)."""
-    if strat.upcoming_blocked_by_lookahead(filters):
-        reason = "roi" if strat.bet_roi_filter_active(filters) else "ft_outcome"
-        return {
-            "ok": True,
-            "matches": [],
-            "n": 0,
-            "xroi_n": 0,
-            "skipped": True,
-            "skip_reason": reason,
-            "message": (
-                "Bevorstehende Spiele ausgeblendet: ROI-Filter braucht Settlement (Endstand)."
-                if reason == "roi"
-                else "Bevorstehende Spiele ausgeblendet: Ergebnis-Filter braucht Endstand."
-            ),
-        }
     markets = strat.selected_markets_from_filters(filters)
     if not markets:
         return {

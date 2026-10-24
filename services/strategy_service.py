@@ -327,12 +327,8 @@ def compute_per_market_stats(
                     continue
             home = rd.get("home_ft_result") if "home_ft_result" in rd else rd.get("home_score")
             away = rd.get("away_ft_result") if "away_ft_result" in rd else rd.get("away_score")
-            if not skip_prematch_filters and not passes_ft_outcome(filters, home, away):
-                continue
             profit = settle_market(market, home, away, odds)
             if profit is None:
-                continue
-            if not skip_prematch_filters and not passes_bet_roi_range(filters, profit):
                 continue
             o_open = pick_odds(rd, market, "opening")
             o_close = pick_odds(rd, market, "closing")
@@ -592,22 +588,6 @@ def passes_min_games(filters: Dict[str, Any], games_count: Any, *, allow_missing
     return gc >= need
 
 
-def ft_outcome_flags(filters: Dict[str, Any]) -> Dict[str, bool]:
-    """Ergebnis-Filter (Look-ahead): nur abgeschlossene Spiele mit FT-Ergebnis."""
-    return {
-        "home": bool(filters.get("ft_home_win")),
-        "draw": bool(filters.get("ft_draw")),
-        "away": bool(filters.get("ft_away_win")),
-        "over25": bool(filters.get("ft_over_25")),
-        "under25": bool(filters.get("ft_under_25")),
-    }
-
-
-def ft_outcome_filter_active(filters: Dict[str, Any]) -> bool:
-    flags = ft_outcome_flags(filters)
-    return any(flags.values())
-
-
 def passes_xroi_range(filters: Dict[str, Any], xroi_pct: Any) -> bool:
     """xROI % = (Open−Close)/Close×100 — Min/Max wie Quote."""
     xmin = _f(filters.get("xroi_min"))
@@ -618,72 +598,6 @@ def passes_xroi_range(filters: Dict[str, Any], xroi_pct: Any) -> bool:
     if xr is None:
         return False
     return in_range(xr, xmin, xmax)
-
-
-def bet_roi_pct(profit: Any) -> Optional[float]:
-    """ROI % einer 1u-Wette (= Profit×100)."""
-    p = _f(profit)
-    if p is None:
-        return None
-    return p * 100.0
-
-
-def passes_bet_roi_range(filters: Dict[str, Any], profit: Any) -> bool:
-    """Filter auf Einzelwetten-ROI % (Look-ahead, braucht Settlement)."""
-    rmin = _f(filters.get("roi_min"))
-    rmax = _f(filters.get("roi_max"))
-    if rmin is None and rmax is None:
-        return True
-    rp = bet_roi_pct(profit)
-    if rp is None:
-        return False
-    return in_range(rp, rmin, rmax)
-
-
-def bet_roi_filter_active(filters: Dict[str, Any]) -> bool:
-    return _f(filters.get("roi_min")) is not None or _f(filters.get("roi_max")) is not None
-
-
-def upcoming_blocked_by_lookahead(filters: Dict[str, Any]) -> bool:
-    """Upcoming unmöglich bei FT-/ROI-Filtern (brauchen den Endstand)."""
-    return ft_outcome_filter_active(filters) or bet_roi_filter_active(filters)
-
-
-def passes_ft_outcome(filters: Dict[str, Any], home: Any, away: Any) -> bool:
-    """Filter nach Endstand: 1X2 und/oder Over/Under 2.5.
-
-    Kein Haken in einer Gruppe = diese Gruppe nicht filtern.
-    Mehrere Haken in einer Gruppe = OR. Beide Gruppen = AND.
-    """
-    flags = ft_outcome_flags(filters)
-    want_1x2 = flags["home"] or flags["draw"] or flags["away"]
-    want_ou = flags["over25"] or flags["under25"]
-    if not want_1x2 and not want_ou:
-        return True
-    try:
-        h = int(home)
-        a = int(away)
-    except (TypeError, ValueError):
-        return False
-    total = h + a
-    if want_1x2:
-        is_home = h > a
-        is_draw = h == a
-        is_away = h < a
-        ok_1x2 = (
-            (flags["home"] and is_home)
-            or (flags["draw"] and is_draw)
-            or (flags["away"] and is_away)
-        )
-        if not ok_1x2:
-            return False
-    if want_ou:
-        is_over = total > 2.5
-        is_under = total <= 2.5
-        ok_ou = (flags["over25"] and is_over) or (flags["under25"] and is_under)
-        if not ok_ou:
-            return False
-    return True
 
 
 COMPARISON_ATTRS = (

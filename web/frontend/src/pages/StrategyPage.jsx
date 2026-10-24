@@ -57,15 +57,6 @@ const MARKET_OPTS = [
   { key: 'market_under_35', label: 'Under 3.5' },
 ]
 
-/** FT-Ergebnis-Filter (Look-ahead) — nur Backtest, nicht Upcoming */
-const FT_OUTCOME_OPTS = [
-  { key: 'ft_home_win', label: 'Home gewonnen' },
-  { key: 'ft_draw', label: 'Unentschieden' },
-  { key: 'ft_away_win', label: 'Away gewonnen' },
-  { key: 'ft_over_25', label: 'Over 2.5' },
-  { key: 'ft_under_25', label: 'Under 2.5' },
-]
-
 function Range({ label, minKey, maxKey, filters, setFilters, step = 'any' }) {
   return (
     <label className="strat-field">
@@ -111,15 +102,12 @@ function activeFilterChips(filters) {
     ['O2.5 Q', 'odds_over_min', 'odds_over_max'],
     ['U2.5 Q', 'odds_under_min', 'odds_under_max'],
     ['xROI', 'xroi_min', 'xroi_max'],
-    ['ROI', 'roi_min', 'roi_max'],
   ]
   for (const [label, a, b] of ranges) {
     if (filled(filters[a]) || filled(filters[b])) {
       chips.push(`${label} ${filters[a] || '…'}–${filters[b] || '…'}`)
     }
   }
-  const ft = FT_OUTCOME_OPTS.filter((o) => filters[o.key]).map((o) => o.label)
-  if (ft.length) chips.push(`Ergebnis: ${ft.join(', ')}`)
   if (filters.use_xg_comparison) {
     const nExtra = Array.isArray(filters.xg_comparisons) ? filters.xg_comparisons.length : 0
     chips.push(nExtra > 0 ? `Vergleich (${1 + nExtra})` : 'Vergleich an')
@@ -228,7 +216,6 @@ const PCT_METRICS = withMetricNames([
   { value: 'awayteam_pred_xg', label: 'awayteam_pred_xg' },
   { value: 'odds', label: 'Quote' },
   { value: 'xroi_pct', label: 'xROI %' },
-  { value: 'profit', label: 'Profit (Look-ahead!)' },
   { value: 'power_home', label: 'power_home' },
   { value: 'power_away', label: 'power_away' },
   { value: 'power_diff', label: 'power_diff' },
@@ -322,18 +309,11 @@ const DEFAULTS = {
   odds_under_max: '',
   xroi_min: '',
   xroi_max: '',
-  roi_min: '',
-  roi_max: '',
   gender_filter: 'men',
   league_filter: '',
   country_filter: '',
   date_from: '',
   date_to: '',
-  ft_home_win: false,
-  ft_draw: false,
-  ft_away_win: false,
-  ft_over_25: false,
-  ft_under_25: false,
   use_xg_comparison: false,
   xg_attr1: 'rating_home',
   xg_operation: '-',
@@ -1091,7 +1071,6 @@ export default function StrategyPage() {
             <Range label="Over 2.5 Quote" minKey="odds_over_min" maxKey="odds_over_max" filters={filters} setFilters={setFilters} step="0.01" />
             <Range label="Under 2.5 Quote" minKey="odds_under_min" maxKey="odds_under_max" filters={filters} setFilters={setFilters} step="0.01" />
             <Range label="xROI %" minKey="xroi_min" maxKey="xroi_max" filters={filters} setFilters={setFilters} step="0.1" />
-            <Range label="ROI % (Wette)" minKey="roi_min" maxKey="roi_max" filters={filters} setFilters={setFilters} step="0.1" />
             <label className="strat-field">
               <span>Geschlecht</span>
               <select
@@ -1114,22 +1093,9 @@ export default function StrategyPage() {
               </select>
             </label>
           </div>
-          <h4 className="strat-subhead">Nur Spiele mit Ergebnis …</h4>
-          <div className="strat-checks">
-            {FT_OUTCOME_OPTS.map((o) => (
-              <label key={o.key}>
-                <input
-                  type="checkbox"
-                  checked={!!filters[o.key]}
-                  onChange={(e) => setFilters((f) => ({ ...f, [o.key]: e.target.checked }))}
-                />
-                {o.label}
-              </label>
-            ))}
-          </div>
           <p className="muted">
-            xROI = (Open−Close)/Close×100 · ROI % pro Wette = Profit×100 (Look-ahead).
-            Ergebnis-Filter: z.B. nur Home-Siege · 1X2 und O/U getrennt (OR / AND).
+            xROI = (Open−Close)/Close×100. Nur Werte, die vor Anpfiff bekannt sind — Ergebnis-, ROI- und
+            Match-xG-Filter gibt es bewusst nicht (Blick in die Zukunft).
           </p>
         </section>
 
@@ -1261,7 +1227,7 @@ export default function StrategyPage() {
             </label>
           </div>
           <p className="muted">
-            z.B. Top 10% Chance · Profit = Look-ahead (nur Analyse, nicht live)
+            z.B. Top 10% Chance
           </p>
         </section>
 
