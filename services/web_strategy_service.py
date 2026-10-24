@@ -1077,6 +1077,21 @@ def find_upcoming(filters: Dict[str, Any], *, limit: int = 200) -> Dict[str, Any
     }
 
 
+def history_stats(m: Dict[str, Any]) -> Dict[str, Any]:
+    """Backtest-Kennzahlen einer Strategie für Übersichten (Serien inkl. Median)."""
+    return {
+        "n_bets": int(m.get("n") or 0),
+        "profit": m.get("total_profit"),
+        "roi_pct": m.get("roi_pct"),
+        "max_losing_streak": int(m.get("max_losing_streak") or 0),
+        "max_winning_streak": int(m.get("max_winning_streak") or 0),
+        "median_losing_streak": m.get("median_losing_streak"),
+        "median_winning_streak": m.get("median_winning_streak"),
+        "n_losing_streaks": int(m.get("n_losing_streaks") or 0),
+        "n_winning_streaks": int(m.get("n_winning_streaks") or 0),
+    }
+
+
 def presets_upcoming(presets: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Bevorstehende Spiele aller gespeicherten Strategien in einer Liste (Datum aufsteigend).
 
@@ -1125,9 +1140,7 @@ def presets_upcoming(presets: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "skipped": bool(up.get("skipped")),
                 "message": up.get("message"),
                 "n_upcoming": len(up_matches),
-                "n_bets": int(m.get("n") or 0),
-                "roi_pct": m.get("roi_pct"),
-                "max_losing_streak": int(m.get("max_losing_streak") or 0),
+                **history_stats(m),
                 **streak,
             }
         )

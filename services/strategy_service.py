@@ -1029,35 +1029,43 @@ def _sort_key_date(row: Dict[str, Any]) -> str:
     return str(d)
 
 
-def compute_streaks(results: List[Dict[str, Any]]) -> Dict[str, int]:
-    """Gewinn-/Verlustserien chronologisch (nach date). Verlust = profit <= 0."""
-    if not results:
-        return {
-            "max_losing_streak": 0,
-            "max_winning_streak": 0,
-            "current_losing_streak": 0,
-            "current_winning_streak": 0,
-        }
-    ordered = sorted(results, key=_sort_key_date)
-    max_lose = max_win = 0
+def compute_streaks(results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Gewinn-/Verlustserien chronologisch (nach date). Verlust = profit <= 0.
+
+    Median = typische Serienlänge; n_* = Anzahl abgeschlossener + laufender Serien,
+    damit man sieht, wie belastbar der Median ist.
+    """
+    import statistics
+
+    ordered = sorted(results or [], key=_sort_key_date)
+    losing: List[int] = []
+    winning: List[int] = []
     cur_lose = cur_win = 0
     for r in ordered:
         p = _f(r.get("profit"))
         if p is None:
             continue
         if p > 0:
+            if cur_lose:
+                losing.append(cur_lose)
             cur_win += 1
             cur_lose = 0
-            max_win = max(max_win, cur_win)
         else:
+            if cur_win:
+                winning.append(cur_win)
             cur_lose += 1
             cur_win = 0
-            max_lose = max(max_lose, cur_lose)
+    all_losing = losing + ([cur_lose] if cur_lose else [])
+    all_winning = winning + ([cur_win] if cur_win else [])
     return {
-        "max_losing_streak": max_lose,
-        "max_winning_streak": max_win,
+        "max_losing_streak": max(all_losing, default=0),
+        "max_winning_streak": max(all_winning, default=0),
         "current_losing_streak": cur_lose,
         "current_winning_streak": cur_win,
+        "median_losing_streak": statistics.median(all_losing) if all_losing else None,
+        "median_winning_streak": statistics.median(all_winning) if all_winning else None,
+        "n_losing_streaks": len(all_losing),
+        "n_winning_streaks": len(all_winning),
     }
 
 

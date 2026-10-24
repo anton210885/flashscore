@@ -26,15 +26,21 @@ function aggregate(rows) {
   const profit = done.reduce((sum, b) => sum + (Number(b.profit) || 0), 0)
   let losing = 0
   let winning = 0
+  const losingRuns = []
+  const winningRuns = []
   for (const b of [...done].sort((a, c) => String(a.date).localeCompare(String(c.date)))) {
     if (b.won === 1) {
+      if (losing) losingRuns.push(losing)
       winning += 1
       losing = 0
     } else {
+      if (winning) winningRuns.push(winning)
       losing += 1
       winning = 0
     }
   }
+  if (losing) losingRuns.push(losing)
+  if (winning) winningRuns.push(winning)
   return {
     bets: rows.length,
     open: rows.length - done.length,
@@ -45,7 +51,38 @@ function aggregate(rows) {
     roi_pct: done.length ? (profit / done.length) * 100 : null,
     losing_streak: losing,
     winning_streak: winning,
+    max_losing_streak: Math.max(0, ...losingRuns),
+    max_winning_streak: Math.max(0, ...winningRuns),
+    median_losing_streak: median(losingRuns),
+    median_winning_streak: median(winningRuns),
+    n_losing_streaks: losingRuns.length,
+    n_winning_streaks: winningRuns.length,
   }
+}
+
+function median(values) {
+  if (!values.length) return null
+  const v = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(v.length / 2)
+  return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2
+}
+
+/** „2 (5)“ = Median 2 aus 5 Serien */
+const medianCell = (m, n) => (m == null ? '—' : `${num(m, 1)} (${n})`)
+
+/** Offene Wette: Live-Stand aus dem Sync (alle 3 Min.) */
+function liveText(b) {
+  const l = b.live
+  if (!l || l.phase === 'scheduled') return 'offen'
+  const score = l.home != null ? ` · ${l.home}:${l.away}` : ''
+  if (l.phase === 'finished') return `beendet${score} · wird abgerechnet`
+  return `live ${l.minute != null ? `${l.minute}'` : l.label || ''}${score}`
+}
+
+function liveTone(b) {
+  const l = b.live
+  if (!l || l.winning == null || l.phase === 'scheduled') return 'muted'
+  return l.winning ? 'pos' : 'neg'
 }
 
 const tone = (v) => (v > 0 ? 'pos' : v < 0 ? 'neg' : '')
@@ -67,6 +104,7 @@ export default function VerificationPage() {
   const [strategy, setStrategy] = useState('')
   const [status, setStatus] = useState('')
   const [market, setMarket] = useState('')
+  const [auto, setAuto] = useState(true)
   const [sortBy, setSortBy] = useState('date_asc')
 
   const load = useCallback(() => {
@@ -82,6 +120,13 @@ export default function VerificationPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Live-Stände: der Sync aktualisiert alle 3 Min. — jede Minute neu laden reicht
+  useEffect(() => {
+    if (!auto) return undefined
+    const t = setInterval(load, 60000)
+    return () => clearInterval(t)
+  }, [auto, load])
 
   const scan = () => {
     setScanning(true)
@@ -118,6 +163,7 @@ export default function VerificationPage() {
         strategy: rows[rows.length - 1].strategy_name,
         backtest_roi: backtest[id]?.backtest_roi,
         backtest_n: backtest[id]?.backtest_n,
+        backtest: backtest[id]?.backtest || null,
         ...aggregate(rows),
       }))
       .sort((a, b) => String(a.strategy).localeCompare(String(b.strategy)))
@@ -142,6 +188,10 @@ export default function VerificationPage() {
           </p>
         </div>
         <div className="toolbar-actions">
+          <label className="chk">
+            <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
+            Live jede Minute
+          </label>
           <button type="button" className="nav-btn" onClick={load} disabled={loading || scanning}>
             {loading ? 'Lädt…' : 'Aktualisieren'}
           </button>
@@ -187,44 +237,69 @@ export default function VerificationPage() {
           <table>
             <thead>
               <tr>
-                <th>Strategie</th>
+                <th rowSpan={2}>Strategie</th>
+                <th colSpan={7} className="num" style={{ textAlign: 'center' }} title="Vergangenheit (Backtest der aktuellen Filter)">
+                  Backtest
+                </th>
+                <th colSpan={11} className="num" style={{ textAlign: 'center' }} title="Echte Vorwärts-Wetten ab Start der Verifikation">
+                  Verifikation
+                </th>
+              </tr>
+              <tr>
                 <th className="num">Wetten</th>
-                <th className="num">Offen</th>
-                <th className="num">Gewonnen</th>
-                <th className="num">Verloren</th>
-                <th className="num">Trefferquote</th>
                 <th className="num">Profit</th>
                 <th className="num">ROI %</th>
-                <th className="num" title="ROI im Backtest (Vergangenheit) zum Vergleich">Backtest ROI %</th>
-                <th className="num" title="Verlorene Wetten in Folge (aktuell)">Serie −</th>
-                <th className="num" title="Gewonnene Wetten in Folge (aktuell)">Serie +</th>
+                <th className="num" title="Längste Niederlagenserie">Max −</th>
+                <th className="num" title="Längste Siegesserie">Max +</th>
+                <th className="num" title="Typische Niederlagenserie: Median (Anzahl Serien)">Median −</th>
+                <th className="num" title="Typische Siegesserie: Median (Anzahl Serien)">Median +</th>
+                <th className="num">Wetten</th>
+                <th className="num">Offen</th>
+                <th className="num">Gew.</th>
+                <th className="num">Verl.</th>
+                <th className="num">Treffer</th>
+                <th className="num">Profit</th>
+                <th className="num">ROI %</th>
+                <th className="num" title="Längste Niederlagenserie">Max −</th>
+                <th className="num" title="Längste Siegesserie">Max +</th>
+                <th className="num" title="Typische Niederlagenserie: Median (Anzahl Serien)">Median −</th>
+                <th className="num" title="Aktuelle Serie: − verloren / + gewonnen in Folge">Aktuell</th>
               </tr>
             </thead>
             <tbody>
-              {summary.map((s) => (
-                <tr
-                  key={s.strategy_id}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setStrategy(strategy === s.strategy_id ? '' : s.strategy_id)}
-                  title="Klick → nur diese Strategie anzeigen"
-                >
-                  <td>{strategy === s.strategy_id ? <strong>{s.strategy}</strong> : s.strategy}</td>
-                  <td className="num">{s.bets}</td>
-                  <td className="num">{s.open}</td>
-                  <td className="num pos">{s.won}</td>
-                  <td className="num neg">{s.lost}</td>
-                  <td className="num">{s.win_rate == null ? '—' : `${num(s.win_rate, 1)}%`}</td>
-                  <td className={`num ${tone(s.profit)}`}>{signed(s.profit)}</td>
-                  <td className={`num ${tone(s.roi_pct)}`}>
-                    {s.roi_pct == null ? '—' : signed(s.roi_pct, 1)}
-                  </td>
-                  <td className="num">
-                    {s.backtest_roi == null ? '—' : `${signed(s.backtest_roi, 1)} (n=${s.backtest_n})`}
-                  </td>
-                  <td className={`num ${s.losing_streak > 0 ? 'neg' : ''}`}>{s.losing_streak}</td>
-                  <td className={`num ${s.winning_streak > 0 ? 'pos' : ''}`}>{s.winning_streak}</td>
-                </tr>
-              ))}
+              {summary.map((s) => {
+                const bt = s.backtest || {}
+                return (
+                  <tr
+                    key={s.strategy_id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setStrategy(strategy === s.strategy_id ? '' : s.strategy_id)}
+                    title="Klick → nur diese Strategie anzeigen"
+                  >
+                    <td>{strategy === s.strategy_id ? <strong>{s.strategy}</strong> : s.strategy}</td>
+                    <td className="num">{num(bt.n_bets ?? s.backtest_n, 0)}</td>
+                    <td className={`num ${tone(bt.profit)}`}>{signed(bt.profit)}</td>
+                    <td className={`num ${tone(bt.roi_pct ?? s.backtest_roi)}`}>{signed(bt.roi_pct ?? s.backtest_roi, 1)}</td>
+                    <td className="num neg">{num(bt.max_losing_streak, 0)}</td>
+                    <td className="num pos">{num(bt.max_winning_streak, 0)}</td>
+                    <td className="num">{medianCell(bt.median_losing_streak, bt.n_losing_streaks)}</td>
+                    <td className="num">{medianCell(bt.median_winning_streak, bt.n_winning_streaks)}</td>
+                    <td className="num">{s.bets}</td>
+                    <td className="num">{s.open}</td>
+                    <td className="num pos">{s.won}</td>
+                    <td className="num neg">{s.lost}</td>
+                    <td className="num">{s.win_rate == null ? '—' : `${num(s.win_rate, 1)}%`}</td>
+                    <td className={`num ${tone(s.profit)}`}>{signed(s.profit)}</td>
+                    <td className={`num ${tone(s.roi_pct)}`}>{s.roi_pct == null ? '—' : signed(s.roi_pct, 1)}</td>
+                    <td className="num neg">{s.max_losing_streak}</td>
+                    <td className="num pos">{s.max_winning_streak}</td>
+                    <td className="num">{medianCell(s.median_losing_streak, s.n_losing_streaks)}</td>
+                    <td className={`num ${s.losing_streak > 0 ? 'neg' : s.winning_streak > 0 ? 'pos' : ''}`}>
+                      {s.losing_streak > 0 ? `−${s.losing_streak}` : s.winning_streak > 0 ? `+${s.winning_streak}` : '0'}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -300,8 +375,8 @@ export default function VerificationPage() {
                 <td className="num">
                   {b.home_score == null ? '—' : `${b.home_score}:${b.away_score}`}
                 </td>
-                <td className={b.status === 'gewonnen' ? 'pos' : b.status === 'verloren' ? 'neg' : 'muted'}>
-                  {b.status}
+                <td className={b.status === 'gewonnen' ? 'pos' : b.status === 'verloren' ? 'neg' : liveTone(b)}>
+                  {b.status === 'offen' ? liveText(b) : b.status}
                   {b.status === 'offen' && !b.still_matches ? (
                     <span className="muted" title="Spiel passt nicht mehr zu den Filtern (z. B. Quote verschoben) — bleibt trotzdem drin">
                       {' '}· passt nicht mehr

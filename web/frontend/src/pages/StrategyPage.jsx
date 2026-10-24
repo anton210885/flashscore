@@ -593,6 +593,7 @@ export default function StrategyPage() {
           error: s.error || null,
           losingStreak: s.losing_streak,
           winningStreak: s.winning_streak,
+          history: s,
         }))
         const map = {}
         for (const r of rows) map[r.id] = r
@@ -863,6 +864,14 @@ export default function StrategyPage() {
                   <tr>
                     <th>Strategie</th>
                     <th className="num">Upcoming</th>
+                    <th className="num" title="Wetten im Backtest (Vergangenheit)">Vergangene</th>
+                    <th className="num">Profit</th>
+                    <th className="num">ROI %</th>
+                    <th className="num" title="Längste Niederlagenserie">Max −</th>
+                    <th className="num" title="Längste Siegesserie">Max +</th>
+                    <th className="num" title="Typische Niederlagenserie (Median, Anzahl Serien)">Median −</th>
+                    <th className="num" title="Typische Siegesserie (Median, Anzahl Serien)">Median +</th>
+                    <th className="num" title="Aktuelle Serie: − verloren / + gewonnen in Folge">Aktuell</th>
                     <th>Status</th>
                     <th></th>
                   </tr>
@@ -878,6 +887,26 @@ export default function StrategyPage() {
                       <td>{r.name}</td>
                       <td className="num">
                         {r.skipped ? '—' : <strong>{r.n}</strong>}
+                      </td>
+                      <td className="num">{num(r.history?.n_bets, 0)}</td>
+                      <td className={`num ${r.history?.profit > 0 ? 'pos' : r.history?.profit < 0 ? 'neg' : ''}`}>
+                        {num(r.history?.profit)}
+                      </td>
+                      <td className={`num ${r.history?.roi_pct > 0 ? 'pos' : r.history?.roi_pct < 0 ? 'neg' : ''}`}>
+                        {num(r.history?.roi_pct, 1)}
+                      </td>
+                      <td className="num neg">{num(r.history?.max_losing_streak, 0)}</td>
+                      <td className="num pos">{num(r.history?.max_winning_streak, 0)}</td>
+                      <td className="num">
+                        {num(r.history?.median_losing_streak, 1)}
+                        <span className="muted"> ({r.history?.n_losing_streaks ?? 0})</span>
+                      </td>
+                      <td className="num">
+                        {num(r.history?.median_winning_streak, 1)}
+                        <span className="muted"> ({r.history?.n_winning_streaks ?? 0})</span>
+                      </td>
+                      <td className={`num ${r.losingStreak > 0 ? 'neg' : 'pos'}`}>
+                        {r.losingStreak > 0 ? `−${r.losingStreak}` : r.winningStreak > 0 ? `+${r.winningStreak}` : '0'}
                       </td>
                       <td className="muted">
                         {r.error

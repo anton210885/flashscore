@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS verification_strategy_stats (
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(verification_strategy_stats)")}
+    if "history_json" not in cols:
+        conn.execute("ALTER TABLE verification_strategy_stats ADD COLUMN history_json TEXT")
     conn.commit()
 
 
@@ -95,15 +98,20 @@ def record_upcoming(conn: sqlite3.Connection, presets: List[Dict[str, Any]]) -> 
         m = a.get("metrics") or {}
         conn.execute(
             """
-            INSERT INTO verification_strategy_stats (strategy_id, strategy_name, backtest_n, backtest_roi, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO verification_strategy_stats
+                (strategy_id, strategy_name, backtest_n, backtest_roi, history_json, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(strategy_id) DO UPDATE SET
                 strategy_name = excluded.strategy_name,
                 backtest_n = excluded.backtest_n,
                 backtest_roi = excluded.backtest_roi,
+                history_json = excluded.history_json,
                 updated_at = excluded.updated_at
             """,
-            (sid, name, int(m.get("n") or 0), m.get("roi_pct"), now),
+            (
+                sid, name, int(m.get("n") or 0), m.get("roi_pct"),
+                json.dumps(web_strat.history_stats(m)), now,
+            ),
         )
         up = a.get("upcoming") or {}
         if up.get("skipped"):
@@ -194,14 +202,70 @@ def settle(conn: sqlite3.Connection) -> Dict[str, int]:
     return {"settled": settled, "open_with_result": len(rows)}
 
 
-def _streak(bets: List[Dict[str, Any]]) -> Dict[str, int]:
-    lose = win = 0
-    for b in sorted(bets, key=lambda r: str(r.get("date") or "")):
-        if b.get("won") == 1:
-            win, lose = win + 1, 0
+def _live_info(conn: sqlite3.Connection, bet: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Stand eines offenen Spiels: läuft (Minute, Zwischenstand) oder beendet, aber noch nicht abgerechnet.
+
+    Quelle: upcoming_games (Sync alle 3 Min.) bzw. games nach Spielende — keine API-Abfrage.
+    """
+    from services.match_status import FINISHED_STATUS_CODES, LIVE_STATUS_CODES
+
+    gid = bet["game_id"]
+    g = conn.execute(
+        "SELECT home_ft_result, away_ft_result FROM games WHERE id = ?", (gid,)
+    ).fetchone()
+    if g and g[0] is not None and g[1] is not None:
+        h, a, phase, minute, label = int(g[0]), int(g[1]), "finished", None, "beendet"
+    else:
+        u = conn.execute(
+            """
+            SELECT status, status_name, elapsed, home_result, away_result
+            FROM upcoming_games WHERE id = ?
+            """,
+            (gid,),
+        ).fetchone()
+        if not u:
+            return None
+        status, status_name, elapsed, h, a = u
+        try:
+            code = int(status) if status is not None else None
+        except (TypeError, ValueError):
+            code = None
+        # Statuscode allein ist unzuverlässig (Code 2 kommt auch als „Not Started“)
+        if _not_started(bet.get("date")) or "not started" in str(status_name or "").lower():
+            return {"phase": "scheduled", "label": status_name or None}
+        if code in FINISHED_STATUS_CODES:
+            phase = "finished"
+        elif code in LIVE_STATUS_CODES:
+            phase = "live"
         else:
-            lose, win = lose + 1, 0
-    return {"losing_streak": lose, "winning_streak": win}
+            return {"phase": "scheduled", "label": status_name or None}
+        minute, label = elapsed, status_name
+        if h is None or a is None:
+            return {"phase": phase, "label": label, "minute": minute}
+    odds = bet.get("odds_used") or 2.0
+    profit = strat.settle_market(bet["market"], h, a, odds)
+    return {
+        "phase": phase,
+        "label": label,
+        "minute": minute,
+        "home": h,
+        "away": a,
+        "winning": None if profit is None else profit > 0,
+    }
+
+
+def _forward_stats(done: List[Dict[str, Any]]) -> Dict[str, Any]:
+    st = strat.compute_streaks(done)
+    return {
+        "losing_streak": st["current_losing_streak"],
+        "winning_streak": st["current_winning_streak"],
+        "max_losing_streak": st["max_losing_streak"],
+        "max_winning_streak": st["max_winning_streak"],
+        "median_losing_streak": st["median_losing_streak"],
+        "median_winning_streak": st["median_winning_streak"],
+        "n_losing_streaks": st["n_losing_streaks"],
+        "n_winning_streaks": st["n_winning_streaks"],
+    }
 
 
 def report(conn: sqlite3.Connection, strategy_id: Optional[str] = None) -> Dict[str, Any]:
@@ -218,6 +282,7 @@ def report(conn: sqlite3.Connection, strategy_id: Optional[str] = None) -> Dict[
             (b["odds_opening"] if b["odds_type"] == "opening" else b["odds_closing"]) or b["odds_first"]
         )
         b["status"] = "offen" if b["settled_at"] is None else ("gewonnen" if b["won"] == 1 else "verloren")
+        b["live"] = _live_info(conn, b) if b["settled_at"] is None else None
     backtest = {
         r["strategy_id"]: dict(r) for r in conn.execute("SELECT * FROM verification_strategy_stats")
     }
@@ -230,6 +295,10 @@ def report(conn: sqlite3.Connection, strategy_id: Optional[str] = None) -> Dict[
         wins = sum(1 for b in done if b["won"] == 1)
         profit = sum(float(b["profit"] or 0) for b in done)
         bt = backtest.get(sid) or {}
+        try:
+            history = json.loads(bt.get("history_json") or "null")
+        except ValueError:
+            history = None
         summary.append(
             {
                 "strategy_id": sid,
@@ -244,7 +313,8 @@ def report(conn: sqlite3.Connection, strategy_id: Optional[str] = None) -> Dict[
                 "roi_pct": (profit / len(done) * 100.0) if done else None,
                 "backtest_n": bt.get("backtest_n"),
                 "backtest_roi": bt.get("backtest_roi"),
-                **_streak(done),
+                "backtest": history,
+                **_forward_stats(done),
             }
         )
     summary.sort(key=lambda s: str(s["strategy"] or ""))
