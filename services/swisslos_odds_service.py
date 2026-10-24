@@ -68,6 +68,10 @@ CREATE TABLE IF NOT EXISTS swisslos_unmatched (
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(swisslos_odds)")}
+    if "sporttip_page" not in cols:
+        conn.execute("ALTER TABLE swisslos_odds ADD COLUMN sporttip_page TEXT")
+        conn.commit()
 
 
 def _now() -> str:
@@ -269,7 +273,10 @@ def fetch_events(
                 log(f"swisslos: Seite {page} fehlgeschlagen: {e}")
                 continue
             # Beim nächsten Seitenwechsel entfernt der Server die Spiele dieser Seite wieder
-            events.update(_collect(sess.entities, now, until))
+            for urn, ev in _collect(sess.entities, now, until).items():
+                # Länderseite merken (erste Seite, auf der das Spiel auftaucht) — für Links auf Sporttip
+                ev["page"] = events[urn]["page"] if urn in events else page
+                events[urn] = ev
     finally:
         sess.close()
     return list(events.values())
@@ -398,12 +405,12 @@ def save(conn: sqlite3.Connection, matched, unmatched) -> Dict[str, int]:
         if not odds:
             continue
         cols = ["game_id", "event_urn", "sl_name", "sl_league", "start_time", "match_score", *ODDS_COLS,
-                "first_seen_at", "updated_at"]
+                "sporttip_page", "first_seen_at", "updated_at"]
         vals = [game_id, ev["urn"], ev["name"], ev["league"], ev["start"].isoformat(), round(score, 3),
-                *[odds.get(c) for c in ODDS_COLS], now, now]
+                *[odds.get(c) for c in ODDS_COLS], ev.get("page"), now, now]
         # Fehlende Quoten (Markt kurz gesperrt) überschreiben den letzten Stand nicht
         updates = ", ".join(
-            f"{c} = COALESCE(excluded.{c}, swisslos_odds.{c})" if c in ODDS_COLS else f"{c} = excluded.{c}"
+            f"{c} = COALESCE(excluded.{c}, swisslos_odds.{c})" if c in (*ODDS_COLS, "sporttip_page") else f"{c} = excluded.{c}"
             for c in cols if c not in ("game_id", "first_seen_at")
         )
         conn.execute(

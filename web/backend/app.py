@@ -292,6 +292,29 @@ def verification(strategy_id: Optional[str] = Query(None)):
         conn.close()
 
 
+@app.post("/api/verification/placed")
+def verification_placed(body: Dict[str, Any] = Body(...)):
+    """Wette als bei Swisslos gesetzt markieren: {bet_id, odds, stake, note?}."""
+    conn = db_connect(os.path.join(ROOT, "data", "flashscore.db"))
+    try:
+        verification_svc.set_placed(conn, body.get("bet_id"), body.get("odds"), body.get("stake"), body.get("note"))
+        return {"ok": True}
+    except (TypeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    finally:
+        conn.close()
+
+
+@app.delete("/api/verification/placed/{bet_id}")
+def verification_unplaced(bet_id: int):
+    conn = db_connect(os.path.join(ROOT, "data", "flashscore.db"))
+    try:
+        verification_svc.unset_placed(conn, bet_id)
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
 @app.post("/api/verification/scan")
 def verification_scan():
     """Jetzt prüfen: bevorstehende Treffer aller Strategien eintragen + Ergebnisse abrechnen."""

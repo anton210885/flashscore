@@ -199,6 +199,14 @@ export default function VerificationPage() {
     const pin = sum('profit')
     return { n: rows.length, sl, pin, slRoi: rows.length ? (sl / rows.length) * 100 : null }
   }, [marketBets])
+  // Echt gesetzt (Wett-Assistent): tatsächliche Quote und Einsatz
+  const real = useMemo(() => {
+    const placed = marketBets.filter((b) => b.placed)
+    const done = placed.filter((b) => b.profit_real != null)
+    const stake = done.reduce((acc, b) => acc + (Number(b.placed.stake) || 0), 0)
+    const profit = done.reduce((acc, b) => acc + (Number(b.profit_real) || 0), 0)
+    return { n: placed.length, settled: done.length, open: placed.length - done.length, stake, profit, roi: stake ? (profit / stake) * 100 : null }
+  }, [marketBets])
   const bets = useMemo(() => {
     const rows = marketBets.filter(
       (b) => (!strategy || b.strategy_id === strategy) && (!status || b.status === status),
@@ -259,6 +267,13 @@ export default function VerificationPage() {
             {total.roi_pct == null ? '—' : `${signed(total.roi_pct, 1)}%`}
           </strong>
         </span>
+        {real.n ? (
+          <span title="Wetten, die du im Wett-Assistenten als gesetzt markiert hast — mit tatsächlicher Quote und Einsatz">
+            Echt gesetzt: <strong>{real.n}</strong> ({real.open} offen) · Einsatz {num(real.stake)} CHF · Gewinn{' '}
+            <strong className={tone(real.profit)}>{signed(real.profit)} CHF</strong>
+            {' · '}ROI <strong className={tone(real.roi)}>{real.roi == null ? '—' : `${signed(real.roi, 1)}%`}</strong>
+          </span>
+        ) : null}
         {slCompare.n ? (
           <span title="Nur abgerechnete Wetten, für die eine Swisslos-Quote vor Anpfiff gespeichert ist">
             Mit Swisslos-Quoten ({slCompare.n} W.): Profit{' '}

@@ -45,6 +45,13 @@ CREATE TABLE IF NOT EXISTS verification_bets (
     UNIQUE(strategy_id, game_id, market)
 );
 CREATE INDEX IF NOT EXISTS idx_verification_open ON verification_bets(settled_at, game_id);
+CREATE TABLE IF NOT EXISTS placed_bets (
+    bet_id INTEGER PRIMARY KEY,
+    odds REAL NOT NULL,
+    stake REAL NOT NULL,
+    note TEXT,
+    placed_at TEXT
+);
 CREATE TABLE IF NOT EXISTS verification_strategy_stats (
     strategy_id TEXT PRIMARY KEY,
     strategy_name TEXT,
@@ -288,6 +295,7 @@ def report(
         for r in conn.execute(f"SELECT * FROM verification_bets {where} ORDER BY date ASC, strategy_name ASC", params)
     ]
     league_of = swisslos.league_ids_for_games(conn, (b["game_id"] for b in bets))
+    placed = {r["bet_id"]: dict(r) for r in conn.execute("SELECT * FROM placed_bets")}
     sl_odds = swisslos_odds_service.odds_for_games(conn, (b["game_id"] for b in bets))
     for b in bets:
         b["swisslos"] = swisslos.is_swisslos(league_of.get(int(b["game_id"])))
@@ -303,6 +311,15 @@ def report(
         )
         b["status"] = "offen" if b["settled_at"] is None else ("gewonnen" if b["won"] == 1 else "verloren")
         b["live"] = _live_info(conn, b) if b["settled_at"] is None else None
+        page = (sl_odds.get(int(b["game_id"])) or {}).get("sporttip_page")
+        b["sporttip_url"] = f"{SPORTTIP_URL}/{page}" if page else None
+        # Selbst bei Swisslos gesetzt: echte Quote + Einsatz → echter Gewinn/Verlust
+        pb = placed.get(b["id"])
+        b["placed"] = pb
+        b["profit_real"] = (
+            None if not pb or b["settled_at"] is None
+            else (pb["stake"] * (pb["odds"] - 1.0) if b["won"] == 1 else -pb["stake"])
+        )
     backtest = {
         r["strategy_id"]: dict(r) for r in conn.execute("SELECT * FROM verification_strategy_stats")
     }
@@ -345,3 +362,29 @@ def report(
         )
     summary.sort(key=lambda s: str(s["strategy"] or ""))
     return {"ok": True, "bets": bets, "summary": summary}
+
+
+SPORTTIP_URL = "https://www.swisslos.ch/de/sporttip/sportwetten/fussball"
+
+
+def set_placed(conn: sqlite3.Connection, bet_id: int, odds: float, stake: float, note: Optional[str] = None) -> None:
+    """Wette als bei Swisslos gesetzt markieren (oder Quote/Einsatz korrigieren)."""
+    ensure_schema(conn)
+    if not conn.execute("SELECT 1 FROM verification_bets WHERE id = ?", (int(bet_id),)).fetchone():
+        raise ValueError("Unbekannte Wette.")
+    if float(odds) <= 1.0 or float(stake) <= 0:
+        raise ValueError("Quote muss über 1 und Einsatz über 0 liegen.")
+    conn.execute(
+        """
+        INSERT INTO placed_bets (bet_id, odds, stake, note, placed_at) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(bet_id) DO UPDATE SET odds = excluded.odds, stake = excluded.stake, note = excluded.note
+        """,
+        (int(bet_id), float(odds), float(stake), note, _now()),
+    )
+    conn.commit()
+
+
+def unset_placed(conn: sqlite3.Connection, bet_id: int) -> None:
+    ensure_schema(conn)
+    conn.execute("DELETE FROM placed_bets WHERE bet_id = ?", (int(bet_id),))
+    conn.commit()
