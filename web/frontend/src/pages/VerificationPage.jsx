@@ -102,7 +102,7 @@ export default function VerificationPage() {
   const [scanning, setScanning] = useState(false)
   const [msg, setMsg] = useState('')
   const [strategy, setStrategy] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState('offen')
   const [market, setMarket] = useState('')
   const [auto, setAuto] = useState(true)
   const [sortBy, setSortBy] = useState('date_asc')
