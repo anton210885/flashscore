@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import ProfitChart from '../components/ProfitChart'
 import SwisslosBadge from '../components/SwisslosBadge'
-import { strategyTooltipFromSummary } from '../strategyTooltip'
+import StrategyHover, { fromForward, fromHistory } from '../components/StrategyHover'
 
 function num(v, digits = 2) {
   if (v == null || v === '') return '—'
@@ -124,6 +124,8 @@ export default function VerificationPage() {
     }
   })
   const isSL = book === 'swisslos'
+  // Alle / nur bei Swisslos gesetzte / nicht gesetzte Wetten (Wett-Assistent „Gesetzt“)
+  const [placedFilter, setPlacedFilter] = useState('all')
   const [sortBy, setSortBy] = useState('date_asc')
 
   const load = useCallback(() => {
@@ -185,13 +187,17 @@ export default function VerificationPage() {
 
   // Markt- und Swisslos-Filter gelten für alles; Strategie/Status nur für die Wetten-Liste
   const marketBets = useMemo(() => {
-    const rows = (data?.bets || []).filter((b) => !market || b.market === market)
+    const rows = (data?.bets || []).filter(
+      (b) =>
+        (!market || b.market === market) &&
+        (placedFilter === 'all' || (placedFilter === 'placed') === Boolean(b.placed)),
+    )
     if (!isSL) return rows.filter((b) => !onlySwisslos || b.swisslos)
     // Swisslos-Sicht: nur Wetten mit Swisslos-Quote, alles mit dieser Quote gerechnet
     return rows
       .filter((b) => b.swisslos && b.odds_swisslos != null)
       .map((b) => ({ ...b, odds_pinnacle: b.odds_used, odds_used: b.odds_swisslos, profit: b.profit_swisslos }))
-  }, [data, market, onlySwisslos, isSL])
+  }, [data, market, onlySwisslos, isSL, placedFilter])
   const summary = useMemo(() => {
     const backtest = Object.fromEntries((data?.summary || []).map((s) => [s.strategy_id, s]))
     const groups = {}
@@ -235,6 +241,9 @@ export default function VerificationPage() {
   const selection = useMemo(() => aggregate(bets), [bets])
   // Hover-Text: Kennzahlen der ganzen Strategie (Server-Zusammenfassung, unabhängig von Filtern)
   const summaryById = useMemo(() => Object.fromEntries((data?.summary || []).map((s) => [s.strategy_id, s])), [data])
+  // Kennzahlen der aktuellen Ansicht (Pinnacle/Swisslos + Filter) — färben den Namen rot/grün
+  const viewById = useMemo(() => Object.fromEntries(summary.map((s) => [s.strategy_id, s])), [summary])
+  const fwdTitle = `Verifikation (${isSL ? 'Swisslos-Quoten' : 'Pinnacle'}${placedFilter === 'placed' ? ', nur gesetzte' : placedFilter === 'unplaced' ? ', nicht gesetzte' : ''})`
 
   return (
     <div className="main strategy-page verification-page">
@@ -288,6 +297,14 @@ export default function VerificationPage() {
                 {m}
               </option>
             ))}
+          </select>
+        </label>
+        <label title="Im Wett-Assistenten bzw. in SL Tipps als gesetzt markiert">
+          Gesetzt{' '}
+          <select value={placedFilter} onChange={(e) => setPlacedFilter(e.target.value)}>
+            <option value="all">alle</option>
+            <option value="placed">nur gesetzte</option>
+            <option value="unplaced">nur nicht gesetzte</option>
           </select>
         </label>
         {!isSL ? (
@@ -374,8 +391,13 @@ export default function VerificationPage() {
                     onClick={() => setStrategy(strategy === s.strategy_id ? '' : s.strategy_id)}
                     title="Klick → nur diese Strategie anzeigen"
                   >
-                    <td className="has-tooltip" title={strategyTooltipFromSummary(s.strategy, summaryById[s.strategy_id])}>
-                      {strategy === s.strategy_id ? <strong>{s.strategy}</strong> : s.strategy}
+                    <td>
+                      <StrategyHover
+                        name={strategy === s.strategy_id ? <strong>{s.strategy}</strong> : s.strategy}
+                        backtest={fromHistory(s.backtest)}
+                        forward={fromForward(s)}
+                        forwardTitle={fwdTitle}
+                      />
                     </td>
                     <td className="num">{num(bt.n_bets ?? s.backtest_n, 0)}</td>
                     <td className={`num ${tone(bt.profit)}`}>{signed(bt.profit)}</td>
@@ -494,8 +516,13 @@ export default function VerificationPage() {
                     {num(b.odds_swisslos)}
                   </td>
                 )}
-                <td className="has-tooltip" title={strategyTooltipFromSummary(b.strategy_name, summaryById[b.strategy_id])}>
-                  {b.strategy_name}
+                <td>
+                  <StrategyHover
+                    name={b.strategy_name}
+                    backtest={fromHistory(summaryById[b.strategy_id]?.backtest)}
+                    forward={fromForward(viewById[b.strategy_id])}
+                    forwardTitle={fwdTitle}
+                  />
                 </td>
                 <td className="num">
                   {b.home_score == null ? '—' : `${b.home_score}:${b.away_score}`}

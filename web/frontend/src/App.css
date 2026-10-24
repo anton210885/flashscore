@@ -1699,13 +1699,6 @@ code {
   vertical-align: 1px;
 }
 
-/* Strategie-Name mit Hover-Infos (Profit, Serien) */
-.has-tooltip {
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
-  cursor: help;
-}
-
 /* Handy / als App auf dem iPhone (Home-Bildschirm) */
 @supports (padding: env(safe-area-inset-top)) {
   .topbar {
@@ -1981,4 +1974,57 @@ code {
   color: #0f1419;
   font-size: 0.7rem;
   font-weight: 700;
+}
+
+/* Strategie-Name mit farbigem Hover-Fenster (StrategyHover) */
+.strat-hover {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+.strat-pop {
+  position: fixed;
+  z-index: 100;
+  display: block;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  white-space: normal;
+  text-decoration: none;
+  cursor: default;
+}
+
+.strat-pop-name {
+  display: block;
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 0.3rem;
+}
+
+.strat-pop-block {
+  display: block;
+  margin-top: 0.35rem;
+}
+
+.strat-pop-title {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.strat-pop .pos,
+.strat-hover.pos {
+  color: var(--green);
+}
+
+.strat-pop .neg,
+.strat-hover.neg {
+  color: var(--red);
 }

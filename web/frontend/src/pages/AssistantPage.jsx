@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import SwisslosBadge from '../components/SwisslosBadge'
-import { strategyTooltipFromSummary } from '../strategyTooltip'
+import StrategyHover, { fromForward, fromHistory } from '../components/StrategyHover'
 import { advice, fmtKickoff, num, pinnacleOdds, readSetting, writeSetting } from '../betAdvice'
 
 /** Wett-Assistent: Strategie-Treffer vor Anpfiff mit Swisslos-Quote, Empfehlung und Link.
@@ -192,8 +192,13 @@ export default function AssistantPage() {
                 <td>{b.home}</td>
                 <td>{b.away}</td>
                 <td>{b.market}</td>
-                <td className="has-tooltip" title={strategyTooltipFromSummary(b.strategy_name, summaryById[b.strategy_id])}>
-                  {b.strategy_name}
+                <td>
+                  <StrategyHover
+                    name={b.strategy_name}
+                    backtest={fromHistory(summaryById[b.strategy_id]?.backtest)}
+                    forward={fromForward(summaryById[b.strategy_id])}
+                    forwardTitle="Verifikation (Pinnacle)"
+                  />
                 </td>
                 <td className="num">{num(pinnacleOdds(b))}</td>
                 <td className="num">
