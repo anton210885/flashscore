@@ -460,10 +460,13 @@ class DatabaseManager:
                         ps.get("rating")
                     ))
             
-            # Save odds (optional)
+            # Odds aus /Games nur, wenn noch keine da sind: das sind gerundete Werte eines
+            # anderen Buchmachers ohne Opening — vorhandene Pinnacle-Quoten nicht überschreiben
             odds_list = game.get("odds", [])
-            if odds_list:
-                conn.execute("DELETE FROM game_odds WHERE game_id = ?", (game_id,))
+            has_odds = conn.execute(
+                "SELECT 1 FROM game_odds WHERE game_id = ? LIMIT 1", (game_id,)
+            ).fetchone()
+            if odds_list and not has_odds:
                 for market in odds_list:
                     market_odds = market.get("odds", [])
                     for odd in market_odds:

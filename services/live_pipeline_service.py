@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from services.match_status import FINISHED_STATUS_CODES
@@ -29,6 +29,42 @@ from services import strategy_service as strat
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DEFAULT_STATUS_PATH = os.path.join(ROOT, "logs", "live_pipeline_status.json")
 PINNACLE = 4
+
+ODDS_FINAL_SQL = """
+CREATE TABLE IF NOT EXISTS game_odds_final (
+    game_id INTEGER PRIMARY KEY,
+    status TEXT,
+    done_at TEXT
+)
+"""
+
+
+def load_final_odds(client, db, game_id: int, *, delay: float = 0.55) -> str:
+    """Nach Spielende: endgültige Pinnacle-Closing laden, Opening nur wenn sie fehlt.
+
+    Rückgabe 'ok' / 'empty' (keine Quoten bei der API). API-Fehler werden geworfen.
+    """
+    conn = db.get_connection()
+    r = strat.backfill_closing_odds(client, db, [int(game_id)], bookmaker_id=PINNACLE, delay=0)
+    if r.get("errors"):
+        raise RuntimeError(f"Closing-Odds {game_id}: API-Fehler")
+    has_open = conn.execute(
+        "SELECT 1 FROM game_odds WHERE game_id = ? AND opening_value > 0 LIMIT 1", (int(game_id),)
+    ).fetchone()
+    if not has_open:
+        time.sleep(delay)
+        strat.backfill_opening_odds(client, db, [int(game_id)], bookmaker_id=PINNACLE, delay=0)
+    status = "ok" if r.get("loaded") else "empty"
+    conn.execute(
+        """
+        INSERT INTO game_odds_final (game_id, status, done_at) VALUES (?, ?, ?)
+        ON CONFLICT(game_id) DO UPDATE SET status = excluded.status, done_at = excluded.done_at
+        """,
+        (int(game_id), status, _now_iso()),
+    )
+    conn.commit()
+    return status
+
 
 FETCH_ATTEMPTS_SQL = """
 CREATE TABLE IF NOT EXISTS fetch_attempts (
@@ -158,6 +194,9 @@ class LivePipelineService:
         xg_lookback_days: int = 3,
         tables_batch: int = 15,
         verify_interval: int = 3600,
+        odds_refresh_hours: int = 2,
+        odds_refresh_batch: int = 60,
+        odds_final_batch: int = 40,
         status_path: str = DEFAULT_STATUS_PATH,
         all_leagues: bool = False,
         log: Optional[Callable[[str], None]] = None,
@@ -181,6 +220,9 @@ class LivePipelineService:
         self.xg_lookback_days = max(1, int(xg_lookback_days))
         self.tables_batch = max(1, int(tables_batch))
         self.verify_interval = max(600, int(verify_interval))
+        self.odds_refresh_hours = max(1, int(odds_refresh_hours))
+        self.odds_refresh_batch = max(5, int(odds_refresh_batch))
+        self.odds_final_batch = max(5, int(odds_final_batch))
         self.status_path = status_path
         self.all_leagues = bool(all_leagues)
         self._log = log or (lambda m: print(m, flush=True))
@@ -197,6 +239,7 @@ class LivePipelineService:
         }
         conn = self.db.get_connection()
         conn.execute(FETCH_ATTEMPTS_SQL)
+        conn.execute(ODDS_FINAL_SQL)
         conn.commit()
 
     def log(self, msg: str) -> None:
@@ -769,9 +812,76 @@ class LivePipelineService:
             except Exception:
                 stats["errors"] += 1
 
+        # Closing kurz vor Anpfiff auffrischen — einmal geladene Quoten wurden sonst nie aktualisiert
+        stats["refreshed"] = 0
+        soon = (datetime.now() + timedelta(hours=self.odds_refresh_hours)).strftime("%Y-%m-%dT%H:%M:%S")
+        now_local = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        try:
+            refresh_ids = [
+                int(r[0])
+                for r in conn.execute(
+                    """
+                    SELECT u.id FROM upcoming_games u
+                    WHERE substr(COALESCE(u.date, ''), 1, 19) >= ?
+                      AND substr(COALESCE(u.date, ''), 1, 19) <= ?
+                      AND EXISTS (
+                        SELECT 1 FROM game_odds o WHERE o.game_id = u.id AND o.value IS NOT NULL
+                      )
+                    ORDER BY u.date ASC
+                    LIMIT ?
+                    """,
+                    (now_local, soon, self.odds_refresh_batch),
+                ).fetchall()
+            ]
+        except Exception:
+            refresh_ids = []
+        for gid in refresh_ids:
+            self._sleep_api()
+            try:
+                r = strat.backfill_closing_odds(
+                    self.client, self.db, [gid], bookmaker_id=PINNACLE, delay=0
+                )
+                stats["refreshed"] += r.get("loaded", 0)
+                stats["errors"] += r.get("errors", 0)
+            except Exception:
+                stats["errors"] += 1
+
+        # Nach Spielende: endgültige Pinnacle-Closing (+ fehlende Opening), einmal pro Spiel
+        stats["final"] = 0
+        utc = datetime.now(timezone.utc)
+        try:
+            final_ids = [
+                int(r[0])
+                for r in conn.execute(
+                    """
+                    SELECT g.id FROM games g
+                    WHERE substr(COALESCE(g.date, ''), 1, 19) >= ?
+                      AND substr(COALESCE(g.date, ''), 1, 19) <= ?
+                      AND NOT EXISTS (SELECT 1 FROM game_odds_final f WHERE f.game_id = g.id)
+                    ORDER BY g.date DESC
+                    LIMIT ?
+                    """,
+                    (
+                        (utc - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%S"),
+                        (utc - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S"),
+                        self.odds_final_batch,
+                    ),
+                ).fetchall()
+            ]
+        except Exception:
+            final_ids = []
+        for gid in final_ids:
+            self._sleep_api()
+            try:
+                if load_final_odds(self.client, self.db, gid, delay=self.api_delay) == "ok":
+                    stats["final"] += 1
+            except Exception:
+                stats["errors"] += 1
+
         self.log(
             f"odds: checked={stats['checked']} close+={stats['closing_loaded']} "
-            f"open+={stats['opening_loaded']} empty={stats['empty']} err={stats['errors']}"
+            f"open+={stats['opening_loaded']} refreshed={stats['refreshed']} "
+            f"final={stats['final']} empty={stats['empty']} err={stats['errors']}"
         )
         self._jobs["odds"] = {"last_run": _now_iso(), "ok": True, "stats": stats}
         return stats
