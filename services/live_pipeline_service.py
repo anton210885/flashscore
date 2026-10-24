@@ -8,6 +8,8 @@ Jobs mit eigenen Intervallen in einem Prozess:
 3. odds    – Opening/Closing für anstehende Spiele nachladen
 4. enrich  – Glicko/xG für kürzlich beendete Spiele ohne xG
 5. catchup – fehlende Spiele der laufenden Saison pro Liga
+6. verify  – Treffer gespeicherter Strategien vor dem Spiel festhalten (Verifikation);
+             abgerechnet wird nach dem Spiel im results-Job
 
 Erfolglose Abfragen landen in `fetch_attempts` und werden erst nach einer
 wachsenden Wartezeit erneut versucht — so blockieren Spiele ohne Daten
@@ -155,6 +157,7 @@ class LivePipelineService:
         result_after_minutes: int = 150,
         xg_lookback_days: int = 3,
         tables_batch: int = 15,
+        verify_interval: int = 3600,
         status_path: str = DEFAULT_STATUS_PATH,
         all_leagues: bool = False,
         log: Optional[Callable[[str], None]] = None,
@@ -177,6 +180,7 @@ class LivePipelineService:
         self.result_after_minutes = max(105, int(result_after_minutes))
         self.xg_lookback_days = max(1, int(xg_lookback_days))
         self.tables_batch = max(1, int(tables_batch))
+        self.verify_interval = max(600, int(verify_interval))
         self.status_path = status_path
         self.all_leagues = bool(all_leagues)
         self._log = log or (lambda m: print(m, flush=True))
@@ -189,6 +193,7 @@ class LivePipelineService:
             "odds": {},
             "enrich": {},
             "catchup": {},
+            "verify": {},
         }
         conn = self.db.get_connection()
         conn.execute(FETCH_ATTEMPTS_SQL)
@@ -259,6 +264,7 @@ class LivePipelineService:
                 "odds_s": self.odds_interval,
                 "enrich_s": self.enrich_interval,
                 "catchup_s": self.catchup_interval,
+                "verify_s": self.verify_interval,
             },
             "jobs": self._jobs,
             "queue": self._queue_snapshot(),
@@ -598,7 +604,16 @@ class LivePipelineService:
                 stats["xg_loaded"] += 1
             self._record_attempt(gid, "xg", ok)
 
-        # 3) Tabellen nachziehen
+        # 3) Verifikation: offene Strategie-Wetten mit Endergebnis abrechnen
+        try:
+            from services import verification_service
+
+            stats["verification_settled"] = verification_service.settle(conn)["settled"]
+        except Exception as e:
+            stats["errors"] += 1
+            self.log(f"results: Verifikation-Abrechnung fehlgeschlagen: {e}")
+
+        # 4) Tabellen nachziehen
         try:
             stats["tables_refreshed"] = self._refresh_tables()
         except Exception as e:
@@ -980,6 +995,23 @@ class LivePipelineService:
         self._jobs["catchup"] = {"last_run": _now_iso(), "ok": True, "stats": stats}
         return stats
 
+    # ── Job 6: Verifikation — Strategie-Treffer vor dem Spiel festhalten ─
+
+    def job_verify(self) -> Dict[str, Any]:
+        from services import strategy_presets_service, verification_service
+
+        presets = strategy_presets_service.load_presets()
+        conn = self.db.get_connection()
+        stats = verification_service.record_upcoming(conn, presets)
+        stats["settled"] = verification_service.settle(conn)["settled"]
+        self.log(
+            f"verify: strategien={stats['strategies']} neu={stats['new']} "
+            f"aktualisiert={stats['updated']} passt_nicht_mehr={stats['no_longer_matching']} "
+            f"abgerechnet={stats['settled']} fehler={len(stats['errors'])}"
+        )
+        self._jobs["verify"] = {"last_run": _now_iso(), "ok": not stats["errors"], "stats": stats}
+        return stats
+
     # ── Main loop ─────────────────────────────────────────────────────
 
     def run_forever(self) -> None:
@@ -997,6 +1029,8 @@ class LivePipelineService:
         next_odds = 0.0
         next_enrich = 0.0
         next_catchup = 0.0
+        # Verifikation ist teuer (Analyse aller Strategien) — erst nach den anderen Jobs
+        next_verify = time.time() + 120
         self._write_status()
 
         try:
@@ -1022,6 +1056,10 @@ class LivePipelineService:
                     if now >= next_catchup:
                         self.job_catchup()
                         next_catchup = time.time() + self.catchup_interval
+                        self._write_status()
+                    if now >= next_verify:
+                        self.job_verify()
+                        next_verify = time.time() + self.verify_interval
                         self._write_status()
                 except Exception as e:
                     self.log(f"Loop-Fehler: {e}")

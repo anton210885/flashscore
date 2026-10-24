@@ -17,13 +17,14 @@ from fastapi import FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 
-from database import ensure_schema
+from database import connect as db_connect, ensure_schema
 from services import web_league_service as svc
 from services import sstats_catalog_service as catalog_svc
 from services import web_games_service as games_svc
 from services import web_stats_service as stats_svc
 from services import web_strategy_service as strategy_svc
 from services import strategy_presets_service as presets_svc
+from services import verification_service as verification_svc
 from services import ai_settings_service as ai_settings_svc
 from services.pipeline_autostart import (
     pipeline_status_brief,
@@ -259,6 +260,28 @@ def strategy_optimize_params(
 def strategy_presets():
     """Gespeicherte Strategie-Filter (data/strategy_presets.json)."""
     return {"presets": presets_svc.load_presets()}
+
+
+@app.get("/api/verification")
+def verification(strategy_id: Optional[str] = Query(None)):
+    """Verifikation: festgehaltene Strategie-Treffer + Zusammenfassung pro Strategie."""
+    conn = db_connect(os.path.join(ROOT, "data", "flashscore.db"))
+    try:
+        return verification_svc.report(conn, strategy_id=strategy_id)
+    finally:
+        conn.close()
+
+
+@app.post("/api/verification/scan")
+def verification_scan():
+    """Jetzt prüfen: bevorstehende Treffer aller Strategien eintragen + Ergebnisse abrechnen."""
+    conn = db_connect(os.path.join(ROOT, "data", "flashscore.db"))
+    try:
+        stats = verification_svc.record_upcoming(conn, presets_svc.load_presets())
+        stats["settled"] = verification_svc.settle(conn)["settled"]
+        return {"ok": True, **stats}
+    finally:
+        conn.close()
 
 
 @app.post("/api/strategy/presets/upcoming")
