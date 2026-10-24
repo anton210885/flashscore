@@ -212,19 +212,6 @@ def analyze(
     add_ge("xg_glicko_away", "xg_glicko_away_min")
     add_le("xg_glicko_away", "xg_glicko_away_max")
 
-    xg_match_keys = (
-        "xg_match_home_min",
-        "xg_match_home_max",
-        "xg_match_away_min",
-        "xg_match_away_max",
-    )
-    if any(filters.get(k) for k in xg_match_keys):
-        query += " AND xg_home IS NOT NULL AND xg_away IS NOT NULL"
-    add_ge("xg_home", "xg_match_home_min")
-    add_le("xg_home", "xg_match_home_max")
-    add_ge("xg_away", "xg_match_away_min")
-    add_le("xg_away", "xg_match_away_max")
-
     if filters.get("country_filter"):
         query += " AND country_name LIKE ?"
         params.append(f"%{filters['country_filter']}%")
@@ -523,13 +510,7 @@ def analyze(
         return out
     # Upcoming nur ohne Look-ahead-Filter (FT-Ergebnis / Einzelwetten-ROI)
     if strat.upcoming_blocked_by_lookahead(filters):
-        if strat.match_xg_filter_active(filters):
-            reason = "match_xg"
-            msg = (
-                "Bevorstehende Spiele ausgeblendet: Match-xG-Filter braucht die im Spiel "
-                "erzielten xG (erst nach dem Match bekannt)."
-            )
-        elif strat.bet_roi_filter_active(filters):
+        if strat.bet_roi_filter_active(filters):
             reason = "roi"
             msg = "Bevorstehende Spiele ausgeblendet: ROI-Filter braucht Settlement (Endstand)."
         else:

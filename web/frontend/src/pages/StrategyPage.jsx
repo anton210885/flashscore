@@ -132,7 +132,6 @@ function activeFilterChips(filters) {
   const advancedKeys = [
     'xg_glicko_home_min', 'xg_glicko_home_max', 'xg_glicko_away_min', 'xg_glicko_away_max',
     'xg_form2_home_min', 'xg_form2_home_max', 'xg_form2_away_min', 'xg_form2_away_max',
-    'xg_match_home_min', 'xg_match_home_max', 'xg_match_away_min', 'xg_match_away_max',
     'glicko_home_min', 'glicko_home_max', 'glicko_away_min', 'glicko_away_max',
     'glicko_rd_home_min', 'glicko_rd_home_max', 'glicko_rd_away_min', 'glicko_rd_away_max',
     'glicko_vol_home_min', 'glicko_vol_home_max', 'glicko_vol_away_min', 'glicko_vol_away_max',
@@ -141,8 +140,6 @@ function activeFilterChips(filters) {
     'season_games_home_min', 'season_games_home_max', 'season_games_away_min', 'season_games_away_max',
   ]
   if (advancedKeys.some((k) => filled(filters[k]))) chips.push('Glicko/Saison-Filter')
-  const matchXgKeys = ['xg_match_home_min', 'xg_match_home_max', 'xg_match_away_min', 'xg_match_away_max']
-  if (matchXgKeys.some((k) => filled(filters[k]))) chips.push('Match-xG (Look-ahead)')
   return chips
 }
 
@@ -355,10 +352,6 @@ const DEFAULTS = {
   xg_form2_home_max: '',
   xg_form2_away_min: '',
   xg_form2_away_max: '',
-  xg_match_home_min: '',
-  xg_match_home_max: '',
-  xg_match_away_min: '',
-  xg_match_away_max: '',
   season_games_home_min: '',
   season_games_home_max: '',
   season_games_away_min: '',
@@ -1281,15 +1274,6 @@ export default function StrategyPage() {
           <Range label="Away xG Glicko" minKey="xg_glicko_away_min" maxKey="xg_glicko_away_max" filters={filters} setFilters={setFilters} step="0.01" />
           <Range label="Home xG Form2" minKey="xg_form2_home_min" maxKey="xg_form2_home_max" filters={filters} setFilters={setFilters} step="0.01" />
           <Range label="Away xG Form2" minKey="xg_form2_away_min" maxKey="xg_form2_away_max" filters={filters} setFilters={setFilters} step="0.01" />
-        </section>
-
-        <section className="strat-card">
-          <h3>Match xG (erzielt)</h3>
-          <p className="muted" style={{ marginTop: 0 }}>
-            Tatsächliche xG in diesem Spiel (calculated). Look-ahead — nur Analyse, Upcoming wird ausgeblendet.
-          </p>
-          <Range label="Home xG Match" minKey="xg_match_home_min" maxKey="xg_match_home_max" filters={filters} setFilters={setFilters} step="0.01" />
-          <Range label="Away xG Match" minKey="xg_match_away_min" maxKey="xg_match_away_max" filters={filters} setFilters={setFilters} step="0.01" />
         </section>
 
         <section className="strat-card">

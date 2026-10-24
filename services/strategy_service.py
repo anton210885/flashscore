@@ -548,26 +548,6 @@ def passes_form2_xg(filters: Dict[str, Any], xg_h: Any, xg_a: Any) -> bool:
     )
 
 
-def match_xg_filter_active(filters: Dict[str, Any]) -> bool:
-    keys = (
-        "xg_match_home_min",
-        "xg_match_home_max",
-        "xg_match_away_min",
-        "xg_match_away_max",
-    )
-    return any(filters.get(k) not in (None, "") for k in keys)
-
-
-def passes_match_xg(filters: Dict[str, Any], xg_h: Any, xg_a: Any) -> bool:
-    """Tatsächliche Match-xG (calculated/expectedGoals) — Look-ahead, nur Backtest."""
-    if not match_xg_filter_active(filters):
-        return True
-    return (
-        _passes_minmax(filters, xg_h, "xg_match_home_min", "xg_match_home_max")
-        and _passes_minmax(filters, xg_a, "xg_match_away_min", "xg_match_away_max")
-    )
-
-
 def passes_season_game_no(
     filters: Dict[str, Any],
     home_n: Any,
@@ -665,12 +645,8 @@ def bet_roi_filter_active(filters: Dict[str, Any]) -> bool:
 
 
 def upcoming_blocked_by_lookahead(filters: Dict[str, Any]) -> bool:
-    """Upcoming unmöglich bei FT-/ROI-/Match-xG-Filtern (brauchen Endstand bzw. Nachspiel-xG)."""
-    return (
-        ft_outcome_filter_active(filters)
-        or bet_roi_filter_active(filters)
-        or match_xg_filter_active(filters)
-    )
+    """Upcoming unmöglich bei FT-/ROI-Filtern (brauchen den Endstand)."""
+    return ft_outcome_filter_active(filters) or bet_roi_filter_active(filters)
 
 
 def passes_ft_outcome(filters: Dict[str, Any], home: Any, away: Any) -> bool:
@@ -944,9 +920,6 @@ def match_prematch_filters(
     if not passes_glicko_xg(filters, ctx.get("xg_glicko_h"), ctx.get("xg_glicko_a")):
         return False
     if not passes_form2_xg(filters, ctx.get("xg_form2_h"), ctx.get("xg_form2_a")):
-        return False
-    # Match-xG (erzielt) — Look-ahead; bei Upcoming typischerweise leer → blocken über upcoming_blocked
-    if not allow_missing_stats and not passes_match_xg(filters, ctx.get("xg_h"), ctx.get("xg_a")):
         return False
     if not passes_season_game_no(
         filters, home_season_n, away_season_n, allow_missing=allow_missing_stats
