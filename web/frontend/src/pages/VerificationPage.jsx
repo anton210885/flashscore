@@ -114,6 +114,15 @@ export default function VerificationPage() {
     }
   })
   const [auto, setAuto] = useState(true)
+  // Abrechnung mit Pinnacle (wie Backtest) oder mit den echten Swisslos-Quoten
+  const [book, setBook] = useState(() => {
+    try {
+      return localStorage.getItem('verification.book') === 'swisslos' ? 'swisslos' : 'pinnacle'
+    } catch {
+      return 'pinnacle'
+    }
+  })
+  const isSL = book === 'swisslos'
   const [sortBy, setSortBy] = useState('date_asc')
 
   const load = useCallback(() => {
@@ -165,14 +174,23 @@ export default function VerificationPage() {
     }
   }, [onlySwisslos])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('verification.book', book)
+    } catch {
+      /* Speicher nicht verfügbar */
+    }
+  }, [book])
+
   // Markt- und Swisslos-Filter gelten für alles; Strategie/Status nur für die Wetten-Liste
-  const marketBets = useMemo(
-    () =>
-      (data?.bets || []).filter(
-        (b) => (!market || b.market === market) && (!onlySwisslos || b.swisslos),
-      ),
-    [data, market, onlySwisslos],
-  )
+  const marketBets = useMemo(() => {
+    const rows = (data?.bets || []).filter((b) => !market || b.market === market)
+    if (!isSL) return rows.filter((b) => !onlySwisslos || b.swisslos)
+    // Swisslos-Sicht: nur Wetten mit Swisslos-Quote, alles mit dieser Quote gerechnet
+    return rows
+      .filter((b) => b.swisslos && b.odds_swisslos != null)
+      .map((b) => ({ ...b, odds_pinnacle: b.odds_used, odds_used: b.odds_swisslos, profit: b.profit_swisslos }))
+  }, [data, market, onlySwisslos, isSL])
   const summary = useMemo(() => {
     const backtest = Object.fromEntries((data?.summary || []).map((s) => [s.strategy_id, s]))
     const groups = {}
@@ -242,6 +260,21 @@ export default function VerificationPage() {
       {error ? <div className="error-banner">{error}</div> : null}
       {msg ? <p className="muted">{msg}</p> : null}
 
+      <div className="metric-tabs" style={{ marginTop: '0.5rem' }}>
+        <button type="button" className={!isSL ? 'active' : ''} onClick={() => setBook('pinnacle')}>
+          Pinnacle (wie Backtest)
+        </button>
+        <button type="button" className={isSL ? 'active' : ''} onClick={() => setBook('swisslos')}>
+          Swisslos (echte Quoten)
+        </button>
+      </div>
+      {isSL ? (
+        <p className="muted" style={{ margin: '0.4rem 0 0' }}>
+          Nur Wetten aus Swisslos-Ligen mit gespeicherter Swisslos-Quote vor Anpfiff — Profit, ROI, Serien und
+          Verlauf mit dieser Quote gerechnet. Die Backtest-Spalten bleiben Pinnacle.
+        </p>
+      ) : null}
+
       <div className="toolbar" style={{ marginTop: '0.5rem' }}>
         <label>
           Markt{' '}
@@ -254,10 +287,12 @@ export default function VerificationPage() {
             ))}
           </select>
         </label>
-        <label className="chk" title="Nur Spiele aus Ligen, die Swisslos Sporttip anbietet">
-          <input type="checkbox" checked={onlySwisslos} onChange={(e) => setOnlySwisslos(e.target.checked)} />
-          nur Swisslos
-        </label>
+        {!isSL ? (
+          <label className="chk" title="Nur Spiele aus Ligen, die Swisslos Sporttip anbietet">
+            <input type="checkbox" checked={onlySwisslos} onChange={(e) => setOnlySwisslos(e.target.checked)} />
+            nur Swisslos
+          </label>
+        ) : null}
         <span>
           Gesamt: <strong>{total.bets}</strong> Wetten · {total.open} offen ·{' '}
           <span className="pos">{total.won} gewonnen</span> · <span className="neg">{total.lost} verloren</span>
@@ -274,7 +309,7 @@ export default function VerificationPage() {
             {' · '}ROI <strong className={tone(real.roi)}>{real.roi == null ? '—' : `${signed(real.roi, 1)}%`}</strong>
           </span>
         ) : null}
-        {slCompare.n ? (
+        {slCompare.n && !isSL ? (
           <span title="Nur abgerechnete Wetten, für die eine Swisslos-Quote vor Anpfiff gespeichert ist">
             Mit Swisslos-Quoten ({slCompare.n} W.): Profit{' '}
             <strong className={tone(slCompare.sl)}>{signed(slCompare.sl)}</strong>
@@ -414,8 +449,12 @@ export default function VerificationPage() {
               <th>Heim</th>
               <th>Gast</th>
               <th>Markt</th>
-              <th className="num" title="Quote, mit der abgerechnet wird (Opening/Closing laut Strategie)">Quote</th>
-              <th className="num" title="Letzte Swisslos-Quote vor Anpfiff (stündlich abgeholt)">Swisslos</th>
+              <th className="num" title={isSL ? 'Letzte Swisslos-Quote vor Anpfiff — damit wird abgerechnet' : 'Quote, mit der abgerechnet wird (Opening/Closing laut Strategie)'}>
+                {isSL ? 'Swisslos' : 'Quote'}
+              </th>
+              <th className="num" title={isSL ? 'Pinnacle-Quote laut Strategie (Vergleich)' : 'Letzte Swisslos-Quote vor Anpfiff (stündlich abgeholt)'}>
+                {isSL ? 'Pinnacle' : 'Swisslos'}
+              </th>
               <th>Strategie</th>
               <th className="num">Ergebnis</th>
               <th>Status</th>
@@ -435,12 +474,21 @@ export default function VerificationPage() {
                 <td>{b.away}</td>
                 <td>{b.market}</td>
                 <td className="num">{num(b.odds_used)}</td>
-                <td
-                  className={`num ${b.odds_swisslos && b.odds_used && b.odds_swisslos < b.odds_used ? 'muted' : ''}`}
-                  title={b.odds_swisslos && b.odds_used ? `${signed((b.odds_swisslos / b.odds_used - 1) * 100, 1)}% gegenüber Pinnacle` : undefined}
-                >
-                  {num(b.odds_swisslos)}
-                </td>
+                {isSL ? (
+                  <td
+                    className="num muted"
+                    title={b.odds_pinnacle ? `Swisslos ${signed((b.odds_swisslos / b.odds_pinnacle - 1) * 100, 1)}% gegenüber Pinnacle` : undefined}
+                  >
+                    {num(b.odds_pinnacle)}
+                  </td>
+                ) : (
+                  <td
+                    className={`num ${b.odds_swisslos && b.odds_used && b.odds_swisslos < b.odds_used ? 'muted' : ''}`}
+                    title={b.odds_swisslos && b.odds_used ? `${signed((b.odds_swisslos / b.odds_used - 1) * 100, 1)}% gegenüber Pinnacle` : undefined}
+                  >
+                    {num(b.odds_swisslos)}
+                  </td>
+                )}
                 <td>{b.strategy_name}</td>
                 <td className="num">
                   {b.home_score == null ? '—' : `${b.home_score}:${b.away_score}`}
