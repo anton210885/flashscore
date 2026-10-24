@@ -17,6 +17,39 @@ function signed(v, digits = 2) {
 
 const fmtDate = (d) => String(d || '').slice(0, 16).replace('T', ' ')
 
+const MARKETS = ['Home', 'Draw', 'Away', 'Over 2.5', 'Under 2.5', 'Over 3.5', 'Under 3.5', 'Over 4.5', 'Under 4.5']
+
+/** Kennzahlen einer Wetten-Liste; Serie = aktuelle Serie nach Datum (Verlust = Profit <= 0). */
+function aggregate(rows) {
+  const done = rows.filter((b) => b.settled_at != null)
+  const won = done.filter((b) => b.won === 1).length
+  const profit = done.reduce((sum, b) => sum + (Number(b.profit) || 0), 0)
+  let losing = 0
+  let winning = 0
+  for (const b of [...done].sort((a, c) => String(a.date).localeCompare(String(c.date)))) {
+    if (b.won === 1) {
+      winning += 1
+      losing = 0
+    } else {
+      losing += 1
+      winning = 0
+    }
+  }
+  return {
+    bets: rows.length,
+    open: rows.length - done.length,
+    won,
+    lost: done.length - won,
+    win_rate: done.length ? (won / done.length) * 100 : null,
+    profit,
+    roi_pct: done.length ? (profit / done.length) * 100 : null,
+    losing_streak: losing,
+    winning_streak: winning,
+  }
+}
+
+const tone = (v) => (v > 0 ? 'pos' : v < 0 ? 'neg' : '')
+
 const SORTS = {
   date_asc: (a, b) => String(a.date).localeCompare(String(b.date)),
   date_desc: (a, b) => String(b.date).localeCompare(String(a.date)),
@@ -33,6 +66,7 @@ export default function VerificationPage() {
   const [msg, setMsg] = useState('')
   const [strategy, setStrategy] = useState('')
   const [status, setStatus] = useState('')
+  const [market, setMarket] = useState('')
   const [sortBy, setSortBy] = useState('date_asc')
 
   const load = useCallback(() => {
@@ -69,13 +103,33 @@ export default function VerificationPage() {
       .finally(() => setScanning(false))
   }
 
-  const summary = data?.summary || []
+  // Markt-Filter gilt für alles; Strategie/Status nur für die Wetten-Liste
+  const marketBets = useMemo(
+    () => (data?.bets || []).filter((b) => !market || b.market === market),
+    [data, market],
+  )
+  const summary = useMemo(() => {
+    const backtest = Object.fromEntries((data?.summary || []).map((s) => [s.strategy_id, s]))
+    const groups = {}
+    for (const b of marketBets) (groups[b.strategy_id] ||= []).push(b)
+    return Object.entries(groups)
+      .map(([id, rows]) => ({
+        strategy_id: id,
+        strategy: rows[rows.length - 1].strategy_name,
+        backtest_roi: backtest[id]?.backtest_roi,
+        backtest_n: backtest[id]?.backtest_n,
+        ...aggregate(rows),
+      }))
+      .sort((a, b) => String(a.strategy).localeCompare(String(b.strategy)))
+  }, [data, marketBets])
+  const total = useMemo(() => aggregate(marketBets), [marketBets])
   const bets = useMemo(() => {
-    const rows = (data?.bets || []).filter(
+    const rows = marketBets.filter(
       (b) => (!strategy || b.strategy_id === strategy) && (!status || b.status === status),
     )
     return [...rows].sort(SORTS[sortBy])
-  }, [data, strategy, status, sortBy])
+  }, [marketBets, strategy, status, sortBy])
+  const selection = useMemo(() => aggregate(bets), [bets])
 
   return (
     <div className="main strategy-page verification-page">
@@ -99,6 +153,29 @@ export default function VerificationPage() {
 
       {error ? <div className="error-banner">{error}</div> : null}
       {msg ? <p className="muted">{msg}</p> : null}
+
+      <div className="toolbar" style={{ marginTop: '0.5rem' }}>
+        <label>
+          Markt{' '}
+          <select value={market} onChange={(e) => setMarket(e.target.value)}>
+            <option value="">alle Märkte</option>
+            {MARKETS.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span>
+          Gesamt: <strong>{total.bets}</strong> Wetten · {total.open} offen ·{' '}
+          <span className="pos">{total.won} gewonnen</span> · <span className="neg">{total.lost} verloren</span>
+          {' · '}Profit <strong className={tone(total.profit)}>{signed(total.profit)}</strong>
+          {' · '}ROI{' '}
+          <strong className={tone(total.roi_pct)}>
+            {total.roi_pct == null ? '—' : `${signed(total.roi_pct, 1)}%`}
+          </strong>
+        </span>
+      </div>
 
       <h2 className="page-sub" style={{ marginTop: '0.5rem' }}>Pro Strategie</h2>
       {!summary.length && !loading ? (
@@ -137,8 +214,8 @@ export default function VerificationPage() {
                   <td className="num pos">{s.won}</td>
                   <td className="num neg">{s.lost}</td>
                   <td className="num">{s.win_rate == null ? '—' : `${num(s.win_rate, 1)}%`}</td>
-                  <td className={`num ${s.profit > 0 ? 'pos' : s.profit < 0 ? 'neg' : ''}`}>{signed(s.profit)}</td>
-                  <td className={`num ${s.roi_pct > 0 ? 'pos' : s.roi_pct < 0 ? 'neg' : ''}`}>
+                  <td className={`num ${tone(s.profit)}`}>{signed(s.profit)}</td>
+                  <td className={`num ${tone(s.roi_pct)}`}>
                     {s.roi_pct == null ? '—' : signed(s.roi_pct, 1)}
                   </td>
                   <td className="num">
@@ -182,7 +259,14 @@ export default function VerificationPage() {
             <option value="strategy">Strategie, dann Datum</option>
           </select>
         </label>
-        <span className="muted">{bets.length} Wetten</span>
+        <span>
+          Auswahl: <strong>{selection.bets}</strong> Wetten · {selection.won}/{selection.won + selection.lost} gewonnen
+          {' · '}Profit <strong className={tone(selection.profit)}>{signed(selection.profit)}</strong>
+          {' · '}ROI{' '}
+          <strong className={tone(selection.roi_pct)}>
+            {selection.roi_pct == null ? '—' : `${signed(selection.roi_pct, 1)}%`}
+          </strong>
+        </span>
       </div>
 
       <div className="table-wrap">
