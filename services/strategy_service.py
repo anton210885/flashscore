@@ -293,6 +293,8 @@ def compute_per_market_stats(
             if odds is None:
                 continue
             if not skip_prematch_filters:
+                if not passes_other_market_odds(filters, rd, odds_type, fallback_closing=True):
+                    continue
                 xg_ctx = {
                     "xg_h": rd.get("xg_home"),
                     "xg_a": rd.get("xg_away"),
@@ -390,6 +392,33 @@ def odds_range_for_market(filters: Dict[str, Any], market: str) -> Tuple[Optiona
     if not keys:
         return None, None
     return _f(filters.get(keys[0])), _f(filters.get(keys[1]))
+
+
+def passes_other_market_odds(
+    filters: Dict[str, Any],
+    row: Dict[str, Any],
+    odds_type: str = "closing",
+    *,
+    fallback_closing: bool = False,
+) -> bool:
+    """Quotenbereiche nicht gewählter Märkte als Spiel-Filter.
+
+    Beispiel: Away wetten, aber nur Spiele mit Over-2.5-Quote 1–1.7. Der Bereich eines
+    gewählten Markts gilt weiter nur für dessen eigene Wette (match_prematch_filters).
+    """
+    selected = set(selected_markets_from_filters(filters))
+    for market in all_market_names():
+        if market in selected:
+            continue
+        omin, omax = odds_range_for_market(filters, market)
+        if omin is None and omax is None:
+            continue
+        odds = pick_odds(row, market, odds_type)
+        if odds is None and fallback_closing and odds_type == "opening":
+            odds = pick_odds(row, market, "closing")
+        if not in_range(odds, omin, omax):
+            return False
+    return True
 
 
 def in_range(val: Optional[float], vmin: Optional[float], vmax: Optional[float]) -> bool:

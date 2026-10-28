@@ -1105,7 +1105,8 @@ export default function StrategyPage() {
           </div>
           <p className="muted">
             xROI = (Open−Close)/Close×100. Nur Werte, die vor Anpfiff bekannt sind — Ergebnis-, ROI- und
-            Match-xG-Filter gibt es bewusst nicht (Blick in die Zukunft).
+            Match-xG-Filter gibt es bewusst nicht (Blick in die Zukunft). Quote eines nicht gewählten Markts
+            (z. B. Over 2.5 bei Away) filtert die Spiele: nur Spiele, deren Quote dort im Bereich liegt.
           </p>
         </section>
 

@@ -318,6 +318,8 @@ def analyze(
             "p_draw": rd.get("draw_probability"),
             "p_away": rd.get("away_win_probability"),
         }
+        if not strat.passes_other_market_odds(filters, rd, odds_type):
+            continue
         for market in markets:
             odds = strat.pick_odds(rd, market, odds_type)
             if odds is None or odds <= 1.0:
@@ -922,6 +924,8 @@ def find_upcoming(filters: Dict[str, Any], *, limit: int = 200) -> Dict[str, Any
             "p_draw": rd.get("draw_probability"),
             "p_away": rd.get("away_win_probability"),
         }
+        if not strat.passes_other_market_odds(filters, rd, odds_type, fallback_closing=True):
+            continue
         for market in markets:
             odds = strat.pick_odds(rd, market, odds_type)
             # Fallback: Closing wenn Opening gewählt aber fehlt
