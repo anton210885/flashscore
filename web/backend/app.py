@@ -344,7 +344,15 @@ def strategy_presets_save(body: Dict[str, Any] = Body(...)):
     Neue oder geänderte Strategien werden sofort im Hintergrund für die Verifikation
     geprüft — sonst erst beim nächsten stündlichen Lauf der Pipeline.
     """
-    before = {p.get("id"): p.get("filters") for p in presets_svc.load_presets()}
+    old = presets_svc.load_presets()
+    before = {p.get("id"): p.get("filters") for p in old}
+    # Noch nicht zugeordnete Wetten gegen die bisherigen Filter prüfen, bevor die Version steigt
+    conn = db_connect(os.path.join(ROOT, "data", "flashscore.db"))
+    try:
+        verification_svc.ensure_schema(conn)
+        verification_svc.assign_versions(conn, old)
+    finally:
+        conn.close()
     try:
         saved = presets_svc.save_presets(body.get("presets"))
     except ValueError as e:

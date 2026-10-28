@@ -3,6 +3,7 @@ import { api } from '../api'
 import ProfitChart from '../components/ProfitChart'
 import SwisslosBadge from '../components/SwisslosBadge'
 import StrategyHover, { fromForward, fromHistory } from '../components/StrategyHover'
+import { fmtDay, historyTitle } from '../strategyChanges'
 
 function num(v, digits = 2) {
   if (v == null || v === '') return '—'
@@ -98,6 +99,20 @@ const SORTS = {
     String(a.date).localeCompare(String(b.date)),
 }
 
+/** „v3 · geändert 27.10.26“ bei geänderten Strategien; Hover = Änderungen pro Version */
+function VersionBadge({ s }) {
+  const changed = s.version > 1
+  if (!changed && !s.outdated_bets) return null
+  // Vor der Versionierung geändert: Datum/Änderungen unbekannt, nur die alten Wetten sind erkennbar
+  const head = changed ? historyTitle(s.history) : 'Filter vor Beginn der Versionierung geändert'
+  const old = s.outdated_bets ? `\n\n${s.outdated_bets} Wetten mit älteren Filtern` : ''
+  return (
+    <span className="version-badge" title={head + old}>
+      {changed ? `v${s.version} · geändert ${fmtDay(s.version_at)}` : 'geändert'}
+    </span>
+  )
+}
+
 export default function VerificationPage() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
@@ -110,6 +125,14 @@ export default function VerificationPage() {
   const [onlySwisslos, setOnlySwisslos] = useState(() => {
     try {
       return localStorage.getItem('verification.onlySwisslos') === '1'
+    } catch {
+      return false
+    }
+  })
+  // Nur Wetten mit den aktuellen Filtern — sonst mischt die Statistik alte und neue Versionen
+  const [onlyCurrent, setOnlyCurrent] = useState(() => {
+    try {
+      return localStorage.getItem('verification.onlyCurrent') === '1'
     } catch {
       return false
     }
@@ -179,6 +202,14 @@ export default function VerificationPage() {
 
   useEffect(() => {
     try {
+      localStorage.setItem('verification.onlyCurrent', onlyCurrent ? '1' : '0')
+    } catch {
+      /* Speicher nicht verfügbar */
+    }
+  }, [onlyCurrent])
+
+  useEffect(() => {
+    try {
       localStorage.setItem('verification.book', book)
     } catch {
       /* Speicher nicht verfügbar */
@@ -190,6 +221,7 @@ export default function VerificationPage() {
     const rows = (data?.bets || []).filter(
       (b) =>
         (!market || b.market === market) &&
+        (!onlyCurrent || !b.outdated) &&
         (placedFilter === 'all' || (placedFilter === 'placed') === Boolean(b.placed)),
     )
     if (!isSL) return rows.filter((b) => !onlySwisslos || b.swisslos)
@@ -197,7 +229,7 @@ export default function VerificationPage() {
     return rows
       .filter((b) => b.swisslos && b.odds_swisslos != null)
       .map((b) => ({ ...b, odds_pinnacle: b.odds_used, odds_used: b.odds_swisslos, profit: b.profit_swisslos }))
-  }, [data, market, onlySwisslos, isSL, placedFilter])
+  }, [data, market, onlySwisslos, isSL, placedFilter, onlyCurrent])
   const summary = useMemo(() => {
     const backtest = Object.fromEntries((data?.summary || []).map((s) => [s.strategy_id, s]))
     const groups = {}
@@ -211,6 +243,10 @@ export default function VerificationPage() {
         backtest_roi: backtest[id]?.backtest_roi,
         backtest_n: backtest[id]?.backtest_n,
         backtest: backtest[id]?.backtest || null,
+        version: backtest[id]?.version,
+        version_at: backtest[id]?.version_at,
+        history: backtest[id]?.history || [],
+        outdated_bets: backtest[id]?.outdated_bets || 0,
         ...aggregate(rows),
       }))
       .sort((a, b) => String(a.strategy).localeCompare(String(b.strategy)))
@@ -307,6 +343,13 @@ export default function VerificationPage() {
             <option value="unplaced">nur nicht gesetzte</option>
           </select>
         </label>
+        <label
+          className="chk"
+          title="Wetten ausblenden, die mit älteren Filtern einer seither geänderten Strategie erfasst wurden"
+        >
+          <input type="checkbox" checked={onlyCurrent} onChange={(e) => setOnlyCurrent(e.target.checked)} />
+          nur aktuelle Version
+        </label>
         {!isSL ? (
           <label className="chk" title="Nur Spiele aus Ligen, die Swisslos Sporttip anbietet">
             <input type="checkbox" checked={onlySwisslos} onChange={(e) => setOnlySwisslos(e.target.checked)} />
@@ -398,6 +441,7 @@ export default function VerificationPage() {
                         forward={fromForward(s)}
                         forwardTitle={fwdTitle}
                       />
+                      <VersionBadge s={s} />
                     </td>
                     <td className="num">{num(bt.n_bets ?? s.backtest_n, 0)}</td>
                     <td className={`num ${tone(bt.profit)}`}>{signed(bt.profit)}</td>
@@ -490,7 +534,7 @@ export default function VerificationPage() {
           </thead>
           <tbody>
             {bets.map((b) => (
-              <tr key={b.id}>
+              <tr key={b.id} className={b.outdated ? 'row-outdated' : undefined}>
                 <td>{fmtDate(b.date)}</td>
                 <td>{b.country || '—'}</td>
                 <td>
@@ -523,6 +567,14 @@ export default function VerificationPage() {
                     forward={fromForward(viewById[b.strategy_id])}
                     forwardTitle={fwdTitle}
                   />
+                  {b.outdated ? (
+                    <span
+                      className="version-badge version-badge--old"
+                      title={`Mit älteren Filtern erfasst${b.strategy_version ? ` (v${b.strategy_version})` : ''} — Strategie seither geändert`}
+                    >
+                      alte Version
+                    </span>
+                  ) : null}
                 </td>
                 <td className="num">
                   {b.home_score == null ? '—' : `${b.home_score}:${b.away_score}`}
@@ -530,8 +582,15 @@ export default function VerificationPage() {
                 <td className={b.status === 'gewonnen' ? 'pos' : b.status === 'verloren' ? 'neg' : liveTone(b)}>
                   {b.status === 'offen' ? liveText(b) : b.status}
                   {b.status === 'offen' && !b.still_matches ? (
-                    <span className="muted" title="Spiel passt nicht mehr zu den Filtern (z. B. Quote verschoben) — bleibt trotzdem drin">
-                      {' '}· passt nicht mehr
+                    <span
+                      className="muted"
+                      title={
+                        b.outdated
+                          ? 'Passt nicht zu den geänderten Filtern der Strategie — bleibt trotzdem drin'
+                          : 'Spiel passt nicht mehr zu den Filtern (z. B. Quote verschoben) — bleibt trotzdem drin'
+                      }
+                    >
+                      {' '}· {b.outdated ? 'passt nicht zur neuen Version' : 'passt nicht mehr'}
                     </span>
                   ) : null}
                 </td>

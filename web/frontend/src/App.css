@@ -2028,3 +2028,26 @@ code {
 .strat-hover.neg {
   color: var(--red);
 }
+
+/* Verifikation: geänderte Strategien */
+.version-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--yellow);
+  border-radius: 4px;
+  color: var(--yellow);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  cursor: help;
+  vertical-align: middle;
+}
+
+.version-badge--old {
+  border-color: var(--muted);
+  color: var(--muted);
+}
+
+.row-outdated td {
+  opacity: 0.55;
+}

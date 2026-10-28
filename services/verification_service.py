@@ -13,6 +13,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from services import strategy_presets_service as presets_svc
 from services import strategy_service as strat
 from services import swisslos_odds_service
 from services import swisslos_service as swisslos
@@ -67,6 +68,8 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(verification_strategy_stats)")}
     if "history_json" not in cols:
         conn.execute("ALTER TABLE verification_strategy_stats ADD COLUMN history_json TEXT")
+    if "strategy_version" not in {r[1] for r in conn.execute("PRAGMA table_info(verification_bets)")}:
+        conn.execute("ALTER TABLE verification_bets ADD COLUMN strategy_version INTEGER")
     conn.commit()
 
 
@@ -84,15 +87,43 @@ def _not_started(date: Any) -> bool:
     return ko >= datetime.now(timezone.utc)
 
 
+def assign_versions(conn: sqlite3.Connection, presets: List[Dict[str, Any]]) -> None:
+    """Wetten ohne Version (vor der Versionierung erfasst) einmalig zuordnen.
+
+    Gleiche Filter wie die Strategie jetzt → aktuelle Version, sonst 0 (ältere Version).
+    """
+    by_id = {p.get("id"): p for p in presets or [] if p.get("id")}
+    rows = conn.execute(
+        "SELECT id, strategy_id, filters_json FROM verification_bets WHERE strategy_version IS NULL"
+    ).fetchall()
+    for bet_id, sid, filters_json in rows:
+        p = by_id.get(sid)
+        if p is None:
+            continue
+        try:
+            bet_filters = json.loads(filters_json or "{}")
+        except ValueError:
+            bet_filters = {}
+        same = not presets_svc.filter_changes(bet_filters, p.get("filters"))
+        conn.execute(
+            "UPDATE verification_bets SET strategy_version = ? WHERE id = ?",
+            (int(p.get("version") or 1) if same else 0, bet_id),
+        )
+    if rows:
+        conn.commit()
+
+
 def record_upcoming(conn: sqlite3.Connection, presets: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Bevorstehende Treffer aller Strategien eintragen bzw. Quoten aktualisieren."""
     from services import web_strategy_service as web_strat
 
     ensure_schema(conn)
+    assign_versions(conn, presets)
     stats: Dict[str, Any] = {"strategies": 0, "new": 0, "updated": 0, "no_longer_matching": 0, "errors": []}
     now = _now()
     for p in presets or []:
         sid, name, filters = p.get("id"), p.get("name"), p.get("filters") or {}
+        version = int(p.get("version") or 1)
         if not sid:
             continue
         try:
@@ -142,10 +173,13 @@ def record_upcoming(conn: sqlite3.Connection, presets: List[Dict[str, Any]]) -> 
                 INSERT INTO verification_bets (
                     strategy_id, strategy_name, filters_json, game_id, market, date, country,
                     league, home, away, odds_type, odds_first, odds_opening, odds_closing,
-                    first_seen_at, last_seen_at, still_matches
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    first_seen_at, last_seen_at, still_matches, strategy_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                 ON CONFLICT(strategy_id, game_id, market) DO UPDATE SET
                     date = excluded.date,
+                    -- Passt das offene Spiel auch zur neuen Version, gehört es zu ihr
+                    filters_json = excluded.filters_json,
+                    strategy_version = excluded.strategy_version,
                     odds_opening = COALESCE(excluded.odds_opening, verification_bets.odds_opening),
                     odds_closing = COALESCE(excluded.odds_closing, verification_bets.odds_closing),
                     last_seen_at = excluded.last_seen_at,
@@ -155,7 +189,7 @@ def record_upcoming(conn: sqlite3.Connection, presets: List[Dict[str, Any]]) -> 
                 (
                     sid, name, filters_json, key[0], key[1], x.get("date"), x.get("country"),
                     x.get("league"), x.get("home"), x.get("away"), odds_type, x.get("odds"),
-                    x.get("odds_opening"), x.get("odds_closing"), now, now,
+                    x.get("odds_opening"), x.get("odds_closing"), now, now, version,
                 ),
             )
             if cur.rowcount:
@@ -288,6 +322,7 @@ def report(
     (0 Wetten) — sonst taucht eine neue Strategie erst nach ihrem ersten Treffer auf.
     """
     ensure_schema(conn)
+    assign_versions(conn, presets or [])
     conn.row_factory = sqlite3.Row
     where, params = ("WHERE strategy_id = ?", [strategy_id]) if strategy_id else ("", [])
     bets = [
@@ -297,7 +332,11 @@ def report(
     league_of = swisslos.league_ids_for_games(conn, (b["game_id"] for b in bets))
     placed = {r["bet_id"]: dict(r) for r in conn.execute("SELECT * FROM placed_bets")}
     sl_odds = swisslos_odds_service.odds_for_games(conn, (b["game_id"] for b in bets))
+    by_preset = {p.get("id"): p for p in presets or [] if p.get("id")}
     for b in bets:
+        cur_version = int((by_preset.get(b["strategy_id"]) or {}).get("version") or 1)
+        # Mit älteren Filtern erfasst (Strategie seither geändert)
+        b["outdated"] = b["strategy_version"] is not None and b["strategy_version"] < cur_version
         b["swisslos"] = swisslos.is_swisslos(league_of.get(int(b["game_id"])))
         # Letzte Swisslos-Quote vor Anpfiff (Prototyp) und Profit, wenn dort gewettet
         col = swisslos_odds_service.MARKET_COL.get(b["market"])
@@ -342,10 +381,15 @@ def report(
             history = json.loads(bt.get("history_json") or "null")
         except ValueError:
             history = None
+        preset = by_preset.get(sid) or {}
         summary.append(
             {
                 "strategy_id": sid,
                 "strategy": names[sid],
+                "version": preset.get("version") or (1 if preset else None),
+                "version_at": preset.get("versionAt"),
+                "history": preset.get("history") or [],
+                "outdated_bets": sum(1 for b in items if b["outdated"]),
                 "bets": len(items),
                 "open": len(items) - len(done),
                 "settled": len(done),

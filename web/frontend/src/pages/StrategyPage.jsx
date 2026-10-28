@@ -27,6 +27,7 @@ import {
 import { metricName, withMetricNames } from '../metricNames'
 import MatchParamsPanel from '../components/MatchParamsPanel'
 import StrategyHover, { fromHistory } from '../components/StrategyHover'
+import { fmtDay, historyTitle } from '../strategyChanges'
 import {
   ANALYSE_HELP_TITLE,
   CORR_COLUMN_MAP,
@@ -802,6 +803,7 @@ export default function StrategyPage() {
               return (
                 <option key={p.id} value={p.id}>
                   {p.name}
+                  {p.version > 1 ? ` · v${p.version}` : ''}
                   {suffix}
                 </option>
               )
@@ -843,6 +845,14 @@ export default function StrategyPage() {
               ? `Upcoming-Überblick (${presetUpcomingHits})`
               : 'Upcoming-Überblick'}
         </button>
+        {(() => {
+          const p = presets.find((x) => x.id === selectedPresetId)
+          return p?.version > 1 ? (
+            <span className="version-badge" title={historyTitle(p.history)}>
+              v{p.version} · zuletzt geändert {fmtDay(p.versionAt)}
+            </span>
+          ) : null
+        })()}
         {presetMsg ? <span className="muted strat-preset-msg">{presetMsg}</span> : null}
       </section>
 

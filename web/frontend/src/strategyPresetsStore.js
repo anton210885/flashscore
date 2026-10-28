@@ -27,7 +27,11 @@ function writeCache(list) {
 
 function writeAll(list) {
   writeCache(list)
-  api.strategyPresetsSave(list).catch(() => {})
+  // Version/Änderungsverlauf führt der Server — seinen Stand übernehmen
+  api
+    .strategyPresetsSave(list)
+    .then((r) => r?.presets && writeCache(r.presets))
+    .catch(() => {})
   return list
 }
 
@@ -59,6 +63,7 @@ export function saveStrategyPreset(name, filters) {
   const list = readAll()
   const idx = list.findIndex((p) => p.name.toLowerCase() === title.toLowerCase())
   const entry = {
+    ...(idx >= 0 ? list[idx] : {}),
     id: idx >= 0 ? list[idx].id : `sp_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
     name: title,
     filters: { ...filters },
