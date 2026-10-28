@@ -2,7 +2,7 @@ from config import config as cfg
 from api.sstats_client import SStatsClient
 
 client = SStatsClient(cfg.BASE_URL, cfg.API_KEY)
-raw = client.get_games({"Today": True, "TimeZone": getattr(cfg, "TIMEZONE", 2)}) or []
+raw = client.get_games({"Today": True, "TimeZone": cfg.timezone_offset()}) or []
 ns = [
     i
     for i in raw

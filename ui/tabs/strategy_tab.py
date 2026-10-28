@@ -3112,7 +3112,7 @@ QUOTEN:
                 client = getattr(live_service, "client", None)
             params = {"Today": True}
             try:
-                params["TimeZone"] = getattr(cfg, "TIMEZONE")
+                params["TimeZone"] = cfg.timezone_offset()
             except Exception:
                 pass
             raw = client.get_games(params) if client else []

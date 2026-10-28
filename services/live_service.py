@@ -62,7 +62,7 @@ class LiveService:
 
         params = {"Today": True}
         try:
-            params["TimeZone"] = getattr(cfg, "TIMEZONE")
+            params["TimeZone"] = cfg.timezone_offset()
         except Exception:
             pass
 

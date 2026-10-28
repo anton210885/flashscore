@@ -254,7 +254,7 @@ def _fetch_today_from_api() -> List[Dict[str, Any]]:
     client = SStatsClient(base_url=cfg.BASE_URL, api_key=getattr(cfg, "API_KEY", None))
     params = {"Today": True}
     try:
-        params["TimeZone"] = getattr(cfg, "TIMEZONE", 2)
+        params["TimeZone"] = cfg.timezone_offset()
     except Exception:
         pass
     raw = client.get_games(params) or []

@@ -409,7 +409,7 @@ class LivePipelineService:
             try:
                 from config import config as cfg
 
-                params["TimeZone"] = getattr(cfg, "TIMEZONE", 2)
+                params["TimeZone"] = cfg.timezone_offset()
             except Exception:
                 pass
             raw = self.client.get_games(params) or []
