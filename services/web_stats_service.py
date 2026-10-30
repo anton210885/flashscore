@@ -16,6 +16,7 @@ LOG_GLICKO = os.path.join(ROOT, "logs", "backfill_glicko.log")
 LOG_OPENING = os.path.join(ROOT, "logs", "backfill_opening.log")
 LOG_CLOSING = os.path.join(ROOT, "logs", "backfill_closing.log")
 PIPELINE_STATUS = os.path.join(ROOT, "logs", "live_pipeline_status.json")
+XG_BACKFILL_STATUS = os.path.join(ROOT, "logs", "backfill_missing_xg_glicko_status.json")
 
 _PROGRESS_RE = re.compile(
     r"\[(\d+)/(\d+)\]\s+loaded=(\d+)\s+no_data=(\d+)\s+errors=(\d+)"
@@ -106,6 +107,61 @@ def _parse_backfill_log(path: str, kind: str) -> Optional[Dict[str, Any]]:
         out["running_hint"] = age_s < 120 and last_prog["done"] < last_prog["total"]
         remaining = max(0, last_prog["total"] - last_prog["done"])
         out["eta_min"] = round(remaining / 2.0 / 60.0, 1)
+    return out
+
+
+def _xg_backfill_status() -> Dict[str, Any]:
+    """Beendete Spiele ohne xG (in Liga-Saisons mit xG) + Lauf von backfill_missing_xg_glicko."""
+    out: Dict[str, Any] = {"run": None}
+    if os.path.exists(XG_BACKFILL_STATUS):
+        try:
+            with open(XG_BACKFILL_STATUS, "r", encoding="utf-8") as f:
+                run = json.load(f)
+            if isinstance(run, dict):
+                age_s = datetime.now().timestamp() - os.path.getmtime(XG_BACKFILL_STATUS)
+                # Abgebrochene Läufe (Fenster geschlossen) schreiben kein running=False mehr
+                run["running_hint"] = bool(run.get("running")) and age_s < 120
+                total = int(run.get("total") or 0)
+                run["pct"] = _pct(int(run.get("done") or 0), total) if total else 100.0
+                out["run"] = run
+        except (OSError, ValueError, TypeError):
+            pass
+
+    conn = _connect()
+    try:
+        if not _table_exists(conn, "fetch_attempts"):
+            tried_sql = "0"
+        else:
+            tried_sql = "g.id IN (SELECT game_id FROM fetch_attempts WHERE job = 'backfill_xg')"
+        row = conn.execute(
+            f"""
+            WITH xs AS (
+                SELECT DISTINCT league_id, season_year FROM games WHERE calculated_xg_home IS NOT NULL
+            )
+            SELECT
+                COUNT(*),
+                SUM(g.calculated_xg_home IS NOT NULL AND g.calculated_xg_away IS NOT NULL),
+                SUM((g.calculated_xg_home IS NULL OR g.calculated_xg_away IS NULL) AND {tried_sql})
+            FROM games g
+            JOIN xs ON xs.league_id = g.league_id AND xs.season_year = g.season_year
+            WHERE g.home_ft_result IS NOT NULL
+              AND g.date <= strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now')
+            """
+        ).fetchone()
+    finally:
+        conn.close()
+    finished, with_xg, tried = (int(v or 0) for v in row)
+    missing = finished - with_xg
+    out.update(
+        finished=finished,
+        with_xg=with_xg,
+        missing=missing,
+        # einmal abgefragt, API liefert kein xG
+        missing_tried=tried,
+        # noch nie vom Backfill abgefragt → kommt beim nächsten Lauf dran
+        missing_open=missing - tried,
+        pct=_pct(with_xg, finished),
+    )
     return out
 
 
@@ -336,4 +392,5 @@ def get_stats(top_n: int = 12) -> Dict[str, Any]:
         "backfill_opening": _parse_backfill_log(LOG_OPENING, "opening"),
         "backfill_closing": _parse_backfill_log(LOG_CLOSING, "closing"),
         "live_pipeline": _read_pipeline_status(),
+        "backfill_xg": _xg_backfill_status(),
     }

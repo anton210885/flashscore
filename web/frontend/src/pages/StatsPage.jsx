@@ -70,6 +70,52 @@ function BackfillBlock({ title, bf }) {
   )
 }
 
+const XG_PHASES = { xg: 'xG laden', form2: 'Form2 neu berechnen', glicko: 'Glicko laden' }
+
+function XgBackfillBlock({ bf }) {
+  if (!bf) return null
+  const run = bf.run
+  const running = !!run?.running_hint
+  return (
+    <section className="stat-section">
+      <div className="stat-section-head">
+        <h2>xG-Nachladen · beendete Spiele</h2>
+        <span className={`pill ${running ? 'pill-live' : 'pill-muted'}`}>
+          {running ? `läuft · ${XG_PHASES[run.phase] || run.phase}` : 'idle / fertig'}
+        </span>
+      </div>
+      <Bar pct={bf.pct} tone="green" />
+      <div className="stat-meta">
+        <span>
+          mit xG {fmt(bf.with_xg)} / {fmt(bf.finished)}
+        </span>
+        <span>ohne xG {fmt(bf.missing)}</span>
+        <span>davon noch offen {fmt(bf.missing_open)}</span>
+        <span>davon ohne Daten bei API {fmt(bf.missing_tried)}</span>
+      </div>
+      {run ? (
+        <>
+          <Bar pct={run.pct} tone={running ? 'green' : 'accent'} />
+          <div className="stat-meta">
+            <span>
+              {XG_PHASES[run.phase] || run.phase || '—'}: {fmt(run.done)} / {fmt(run.total)}
+            </span>
+            <span>neu {fmt(run.new)}</span>
+            <span>Fehler {fmt(run.errors)}</span>
+          </div>
+          <div className="stat-meta muted">
+            {run.started_at ? <span>Start {run.started_at}</span> : null}
+            {run.finished_at ? <span>Ende {run.finished_at}</span> : null}
+            {run.updated_at ? <span>Update {run.updated_at}</span> : null}
+          </div>
+        </>
+      ) : (
+        <p className="muted">Noch kein Lauf · start_backfill_xg.bat</p>
+      )}
+    </section>
+  )
+}
+
 function PipelineBlock({ pipe }) {
   if (!pipe) {
     return (
@@ -215,6 +261,8 @@ export default function StatsPage() {
       ) : null}
 
       <PipelineBlock pipe={data?.live_pipeline} />
+
+      <XgBackfillBlock bf={data?.backfill_xg} />
 
       <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
         <BackfillBlock title="Glicko-Backfill" bf={data?.backfill} />
