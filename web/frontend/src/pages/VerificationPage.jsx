@@ -94,6 +94,9 @@ const tone = (v) => (v > 0 ? 'pos' : v < 0 ? 'neg' : '')
 const SORTS = {
   date_asc: (a, b) => String(a.date).localeCompare(String(b.date)),
   date_desc: (a, b) => String(b.date).localeCompare(String(a.date)),
+  settled_desc: (a, b) =>
+    String(b.settled_at || '').localeCompare(String(a.settled_at || '')) ||
+    String(b.date).localeCompare(String(a.date)),
   strategy: (a, b) =>
     String(a.strategy_name).localeCompare(String(b.strategy_name)) ||
     String(a.date).localeCompare(String(b.date)),
@@ -270,7 +273,7 @@ export default function VerificationPage() {
   }, [marketBets])
   const bets = useMemo(() => {
     const rows = marketBets.filter(
-      (b) => (!strategy || b.strategy_id === strategy) && (!status || b.status === status),
+      (b) => (!strategy || b.strategy_id === strategy) && (!status || b.status === status || (status === 'abgerechnet' && b.settled_at != null)),
     )
     return [...rows].sort(SORTS[sortBy])
   }, [marketBets, strategy, status, sortBy])
@@ -485,9 +488,16 @@ export default function VerificationPage() {
         </label>
         <label>
           Status{' '}
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value)
+              if (e.target.value === 'abgerechnet') setSortBy('settled_desc')
+            }}
+          >
             <option value="">alle</option>
             <option value="offen">offen</option>
+            <option value="abgerechnet">abgerechnet (gewonnen + verloren)</option>
             <option value="gewonnen">gewonnen</option>
             <option value="verloren">verloren</option>
           </select>
@@ -497,6 +507,7 @@ export default function VerificationPage() {
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
             <option value="date_asc">Datum ↑ (älteste zuerst)</option>
             <option value="date_desc">Datum ↓ (neueste zuerst)</option>
+            <option value="settled_desc">Zuletzt abgerechnet zuerst</option>
             <option value="strategy">Strategie, dann Datum</option>
           </select>
         </label>
@@ -579,7 +590,10 @@ export default function VerificationPage() {
                 <td className="num">
                   {b.home_score == null ? '—' : `${b.home_score}:${b.away_score}`}
                 </td>
-                <td className={b.status === 'gewonnen' ? 'pos' : b.status === 'verloren' ? 'neg' : liveTone(b)}>
+                <td
+                  className={b.status === 'gewonnen' ? 'pos' : b.status === 'verloren' ? 'neg' : liveTone(b)}
+                  title={b.settled_at ? `Abgerechnet: ${fmtDate(b.settled_at)}` : undefined}
+                >
                   {b.status === 'offen' ? liveText(b) : b.status}
                   {b.status === 'offen' && !b.still_matches ? (
                     <span
