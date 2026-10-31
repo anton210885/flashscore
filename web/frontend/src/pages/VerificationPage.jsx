@@ -102,6 +102,14 @@ const SORTS = {
     String(a.date).localeCompare(String(b.date)),
 }
 
+/** Status „alle“: Tabelle in Live / bevorstehend / beendet gliedern */
+const isLive = (b) => b.status === 'offen' && b.live && b.live.phase !== 'scheduled'
+const GROUPS = [
+  { key: 'live', label: 'Live', test: isLive, sort: SORTS.date_asc },
+  { key: 'upcoming', label: 'Bevorstehend', test: (b) => b.status === 'offen' && !isLive(b), sort: SORTS.date_asc },
+  { key: 'done', label: 'Beendet', test: (b) => b.settled_at != null, sort: SORTS.settled_desc },
+]
+
 /** „v3 · geändert 27.10.26“ bei geänderten Strategien; Hover = Änderungen pro Version */
 function VersionBadge({ s }) {
   const changed = s.version > 1
@@ -277,6 +285,19 @@ export default function VerificationPage() {
     )
     return [...rows].sort(SORTS[sortBy])
   }, [marketBets, strategy, status, sortBy])
+  // Eine Strategie gewählt: live, bevorstehende und beendete Spiele zusammen zeigen
+  const pickStrategy = (id) => {
+    setStrategy(id)
+    if (id) setStatus('')
+  }
+  const grouped = !status
+  const tableRows = useMemo(() => {
+    if (!grouped) return bets.map((b) => ({ bet: b }))
+    return GROUPS.flatMap((g) => {
+      const rows = bets.filter(g.test).sort(g.sort)
+      return rows.length ? [{ group: g, count: rows.length }, ...rows.map((b) => ({ bet: b }))] : []
+    })
+  }, [bets, grouped])
   const selection = useMemo(() => aggregate(bets), [bets])
   // Hover-Text: Kennzahlen der ganzen Strategie (Server-Zusammenfassung, unabhängig von Filtern)
   const summaryById = useMemo(() => Object.fromEntries((data?.summary || []).map((s) => [s.strategy_id, s])), [data])
@@ -434,7 +455,7 @@ export default function VerificationPage() {
                   <tr
                     key={s.strategy_id}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => setStrategy(strategy === s.strategy_id ? '' : s.strategy_id)}
+                    onClick={() => pickStrategy(strategy === s.strategy_id ? '' : s.strategy_id)}
                     title="Klick → nur diese Strategie anzeigen"
                   >
                     <td>
@@ -477,7 +498,10 @@ export default function VerificationPage() {
       <div className="toolbar" style={{ marginTop: '1rem' }}>
         <label>
           Strategie{' '}
-          <select value={strategy} onChange={(e) => setStrategy(e.target.value)}>
+          <select
+            value={strategy}
+            onChange={(e) => pickStrategy(e.target.value)}
+          >
             <option value="">alle</option>
             {summary.map((s) => (
               <option key={s.strategy_id} value={s.strategy_id}>
@@ -504,7 +528,12 @@ export default function VerificationPage() {
         </label>
         <label>
           Sortierung{' '}
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            disabled={grouped}
+            title={grouped ? 'Bei Status „alle“: Live und bevorstehend nach Anpfiff, beendet zuletzt abgerechnet zuerst' : undefined}
+          >
             <option value="date_asc">Datum ↑ (älteste zuerst)</option>
             <option value="date_desc">Datum ↓ (neueste zuerst)</option>
             <option value="settled_desc">Zuletzt abgerechnet zuerst</option>
@@ -544,7 +573,14 @@ export default function VerificationPage() {
             </tr>
           </thead>
           <tbody>
-            {bets.map((b) => (
+            {tableRows.map(({ bet: b, group, count }) =>
+              group ? (
+                <tr key={`g-${group.key}`} className="group-row">
+                  <td colSpan={12}>
+                    {group.label} ({count})
+                  </td>
+                </tr>
+              ) : (
               <tr key={b.id} className={b.outdated ? 'row-outdated' : undefined}>
                 <td>{fmtDate(b.date)}</td>
                 <td>{b.country || '—'}</td>
@@ -612,7 +648,8 @@ export default function VerificationPage() {
                   {b.profit == null ? '—' : signed(b.profit)}
                 </td>
               </tr>
-            ))}
+              ),
+            )}
           </tbody>
         </table>
       </div>

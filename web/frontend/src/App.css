@@ -2051,3 +2051,9 @@ code {
 .row-outdated td {
   opacity: 0.55;
 }
+
+.group-row td {
+  font-weight: 600;
+  background: rgba(96, 165, 250, 0.08);
+  border-top: 1px solid rgba(96, 165, 250, 0.3);
+}
