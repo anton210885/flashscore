@@ -1,0 +1,18 @@
+[Unit]
+Description=Flashscore Analytics (API, UI und Live-Pipeline)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/flashscore
+Environment=PYTHONUNBUFFERED=1
+# 0.0.0.0 ist nur sicher, solange Port 8000 in Oracle (Security List) NICHT geöffnet ist —
+# Zugriff läuft über Tailscale. Die App hat kein Login.
+ExecStart=/home/ubuntu/flashscore/.venv/bin/python -m uvicorn web.backend.app:app --host 0.0.0.0 --port 8000 --ws none
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

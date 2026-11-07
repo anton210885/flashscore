@@ -26,3 +26,6 @@ data/*.db-*
 
 # Altbestand
 old/
+
+# Server-Deploy
+VERSION.json

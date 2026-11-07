@@ -1,6 +1,7 @@
 """Flashscore Web API – FastAPI Backend."""
 from __future__ import annotations
 
+import json
 import mimetypes
 import os
 import subprocess
@@ -94,10 +95,19 @@ def _git(*args: str) -> str:
         return ""
 
 
+def _version_file() -> dict:
+    """Server ohne .git (deploy/deploy.ps1): Version steht in VERSION.json."""
+    try:
+        with open(os.path.join(ROOT, "VERSION.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
 # Version beim API-Start aus Git: letzter Tag + Commits danach + Commit-ID, z. B. v1.0.0-17-g28d20ca
 APP_VERSION = {
-    "version": _git("describe", "--tags", "--always") or "unbekannt",
-    "commit_date": _git("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M"),
+    "version": _git("describe", "--tags", "--always") or _version_file().get("version") or "unbekannt",
+    "commit_date": _git("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M") or _version_file().get("commit_date", ""),
 }
 
 
