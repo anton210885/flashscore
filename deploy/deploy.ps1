@@ -3,8 +3,8 @@
 #   powershell -ExecutionPolicy Bypass -File deploy\deploy.ps1 -FirstInstall   # einmalig: Setup + DB + .env
 #   powershell -ExecutionPolicy Bypass -File deploy\deploy.ps1                 # Updates: nur Code + UI
 #
-# Hochgeladen wird der letzte Commit (git archive HEAD), nicht ungespeicherte Änderungen.
-# Was der Server selbst schreibt (Strategie-Presets, DB, .env), wird bei Updates nie überschrieben.
+# Hochgeladen wird der letzte Commit (git archive HEAD), nicht ungespeicherte Aenderungen.
+# Was der Server selbst schreibt (Strategie-Presets, DB, .env), wird bei Updates nie ueberschrieben.
 param(
     [string]$Server = "flashscore-oracle",   # Host-Alias aus ~/.ssh/config
     [switch]$FirstInstall,
@@ -20,7 +20,7 @@ $serverOwned = @("data/strategy_presets.json", "data/liga128_leagues.json", "dat
 
 $dirty = git status --porcelain | Where-Object { $_ -notmatch "data/strategy_presets.json" }
 if ($dirty) {
-    Write-Warning "Nicht committete Änderungen werden NICHT hochgeladen:`n$($dirty -join "`n")"
+    Write-Warning "Nicht committete Aenderungen werden NICHT hochgeladen:`n$($dirty -join "`n")"
 }
 
 if (-not $SkipBuild) {
@@ -54,7 +54,7 @@ $uploads = @("$tmp\fs_bundle.tgz")
 $flags = @()
 if ($FirstInstall) {
     $flags += "--first"
-    Write-Host "DB-Kopie erstellen (läuft auch, während Flashscore lokal läuft) ..."
+    Write-Host "DB-Kopie erstellen (laeuft auch, waehrend Flashscore lokal laeuft) ..."
     $db = "$tmp\fs_db.sqlite"
     python deploy\db_snapshot.py $db
     if ($LASTEXITCODE -ne 0) { throw "DB-Kopie fehlgeschlagen" }
@@ -66,9 +66,11 @@ if ($FirstInstall) {
 }
 if ($OverwriteDb) { $flags += "--overwrite-db" }
 
+# Ab hier zaehlt der Exit-Code: Fortschritt auf stderr (pip, systemd) soll nicht abbrechen
+$ErrorActionPreference = "Continue"
 Write-Host "Hochladen nach $Server ..."
 scp @uploads "${Server}:/tmp/"
-if ($LASTEXITCODE -ne 0) { throw "scp fehlgeschlagen — SSH-Zugang prüfen (deploy/ORACLE.md, Schritt 3)" }
+if ($LASTEXITCODE -ne 0) { throw "scp fehlgeschlagen - SSH-Zugang pruefen (deploy/ORACLE.md, Schritt 3)" }
 
 $remote = "mkdir -p ~/flashscore && tar -xzf /tmp/fs_bundle.tgz -C ~/flashscore && rm /tmp/fs_bundle.tgz && sed -i 's/\r$//' ~/flashscore/deploy/*.sh && bash ~/flashscore/deploy/remote_update.sh $($flags -join ' ')"
 ssh $Server $remote
