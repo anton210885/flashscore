@@ -130,6 +130,24 @@ ssh flashscore-oracle "sqlite3 ~/flashscore/data/flashscore.db '.backup /tmp/fs_
 scp flashscore-oracle:/tmp/fs_backup.db.gz .
 ```
 
+## sstats über Cloudflare WARP
+
+sstats bricht Antworten an Cloud-IPs (Oracle) nach ~30 KB ab, die Tagesliste kommt so nie an.
+Darum läuft auf der VM Cloudflare WARP als lokaler SOCKS-Proxy, und nur die sstats-Abfragen gehen darüber:
+
+```bash
+# einmalig (offizielles Paket von pkg.cloudflareclient.com)
+sudo apt-get install -y cloudflare-warp
+warp-cli --accept-tos registration new
+warp-cli --accept-tos mode proxy          # nur Proxy, Routing/SSH/Tailscale bleiben unberührt
+warp-cli --accept-tos proxy port 40000
+warp-cli --accept-tos connect
+echo 'SSTATS_PROXY=socks5h://127.0.0.1:40000' >> ~/flashscore/.env
+sudo systemctl restart flashscore
+```
+
+Prüfen: `warp-cli --accept-tos status` → „Connected“.
+
 ## Bekannte Punkte
 
 - **Swisslos** von einer Rechenzentrums-IP: sollte aus Zürich gehen, ist aber nicht garantiert.

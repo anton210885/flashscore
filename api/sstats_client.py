@@ -1,5 +1,6 @@
 """Low-level SStats API client (minimal stub)
 """
+import os
 import requests
 import time
 from typing import Any, Dict, Optional, List
@@ -10,6 +11,11 @@ class SStatsClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
         self.session = session or requests.Session()
+        # Oracle-Server: sstats bricht grosse Antworten an Cloud-IPs ab -> Umweg ueber
+        # Cloudflare WARP (SSTATS_PROXY=socks5h://127.0.0.1:40000 in der .env, siehe deploy/ORACLE.md)
+        proxy = os.environ.get("SSTATS_PROXY")
+        if proxy:
+            self.session.proxies = {"http": proxy, "https": proxy}
         # API can be slow at peak times; keep defaults resilient.
         self.request_timeout = 10
         self.max_retries = 4
