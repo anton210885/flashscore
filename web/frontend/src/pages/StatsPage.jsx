@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import DataQualityBlock from '../components/DataQualityBlock'
 
 function fmt(n) {
   if (n == null) return '—'
@@ -259,6 +260,8 @@ export default function StatsPage() {
           />
         </div>
       ) : null}
+
+      <DataQualityBlock />
 
       <PipelineBlock pipe={data?.live_pipeline} />
 

@@ -47,6 +47,8 @@ async function getBlob(path) {
 export const api = {
   health: () => get('/api/health'),
   stats: (top = 12) => get(`/api/stats?top=${top}`),
+  dataQuality: () => get('/api/data-quality'),
+  dataQualityRun: () => post('/api/data-quality/run'),
   strategyAnalyze: (filters, limit = 200) =>
     post(`/api/strategy/analyze?limit=${limit}`, filters),
   strategyUpcoming: (filters, limit = 200) =>

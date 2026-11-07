@@ -2057,3 +2057,22 @@ code {
   background: rgba(96, 165, 250, 0.08);
   border-top: 1px solid rgba(96, 165, 250, 0.3);
 }
+
+/* Datenqualität (DB Statistik) */
+.dq-chip {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dq-ok { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+.dq-info { background: rgba(61, 156, 253, 0.15); color: var(--accent); }
+.dq-warn { background: rgba(251, 191, 36, 0.18); color: var(--yellow); }
+.dq-error { background: rgba(248, 113, 113, 0.18); color: var(--red); }
+.dq .toolbar-actions { flex-wrap: wrap; gap: 0.4rem; }
+.dq-row { cursor: pointer; }
+.dq-detail > td { background: rgba(255, 255, 255, 0.02); }
+.dq-detail p { margin: 0.3rem 0 0.6rem; max-width: 70rem; line-height: 1.45; }
+.dq-examples td { font-size: 0.8rem; padding: 0.25rem 0.5rem; }

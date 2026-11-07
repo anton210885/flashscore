@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 # Projektroot auf sys.path, damit services/database importierbar sind
@@ -204,6 +205,26 @@ def db_stats(top: int = Query(12, ge=1, le=50)):
         return stats_svc.get_stats(top_n=top)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/api/data-quality")
+def data_quality():
+    """Letztes Ergebnis der Datenqualitäts-Prüfung; älter als 24 h → neue Prüfung im Hintergrund."""
+    from services import data_quality_service as dq_svc
+
+    data = dq_svc.latest()
+    checked = data.get("checked_at")
+    if not data.get("running") and (not checked or (datetime.now() - datetime.fromisoformat(checked)).total_seconds() > 86400):
+        dq_svc.start()
+        data["running"] = True
+    return data
+
+
+@app.post("/api/data-quality/run")
+def data_quality_run():
+    from services import data_quality_service as dq_svc
+
+    return {"started": dq_svc.start()}
 
 
 @app.post("/api/strategy/analyze")
