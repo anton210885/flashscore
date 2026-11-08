@@ -26,7 +26,10 @@ if ($dirty) {
 if (-not $SkipBuild) {
     Write-Host "UI bauen ..."
     Push-Location web\frontend
-    npm.cmd run build | Out-Null
+    # Vite meldet Hinweise (Chunk-Groesse) auf stderr - zaehlen soll nur der Exit-Code
+    $ErrorActionPreference = "Continue"
+    npm.cmd run build 2>&1 | Out-Null
+    $ErrorActionPreference = "Stop"
     if ($LASTEXITCODE -ne 0) { throw "UI-Build fehlgeschlagen" }
     Pop-Location
 }

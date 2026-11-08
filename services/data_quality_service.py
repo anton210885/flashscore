@@ -19,7 +19,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_PATH = os.path.join(ROOT, "data", "flashscore.db")
 RESULT_PATH = os.path.join(ROOT, "logs", "data_quality.json")
 
-FINISHED = (8, 9, 10)  # Finished, nach Verlängerung, nach Elfmeterschiessen
+FINISHED = (7, 8, 9, 10)  # wie services/match_status.py: Penalty, Finished, nach Verlängerung/Elfmetern
 EXAMPLES = 8
 
 _lock = threading.Lock()
@@ -97,7 +97,7 @@ def check_glicko_leak(conn: sqlite3.Connection) -> Dict[str, Any]:
         FROM games g
         JOIN game_glicko gl ON gl.game_id = g.id
         JOIN game_odds o ON o.game_id = g.id AND o.market_id = 1
-        WHERE g.status IN (8,9,10) AND g.date >= ? AND gl.home_win_probability IS NOT NULL
+        WHERE g.status IN (7,8,9,10) AND g.date >= ? AND gl.home_win_probability IS NOT NULL
         GROUP BY g.id
         """,
         (_utc(days=730),),
@@ -134,7 +134,7 @@ def check_form2_order(conn: sqlite3.Connection, sample: int = 300) -> Dict[str, 
     """Stichprobe: Anzahl Spiele in xG Saison (home_n) = frühere Spiele des Teams mit xG in derselben Saison."""
     ids = [r[0] for r in conn.execute(
         """SELECT f.game_id FROM game_form2 f JOIN games g ON g.id = f.game_id
-           WHERE g.status IN (8,9,10) AND g.date >= ? AND f.home_n IS NOT NULL""",
+           WHERE g.status IN (7,8,9,10) AND g.date >= ? AND f.home_n IS NOT NULL""",
         (_utc(days=400),),
     )]
     random.seed(42)
@@ -178,7 +178,7 @@ def _odds_1x2(conn: sqlite3.Connection, since: str) -> List[tuple]:
                MAX(CASE WHEN o.name='Home' THEN o.opening_value END), MAX(CASE WHEN o.name='Draw' THEN o.opening_value END),
                MAX(CASE WHEN o.name='Away' THEN o.opening_value END)
         FROM games g JOIN game_odds o ON o.game_id = g.id AND o.market_id = 1
-        WHERE g.status IN (8,9,10) AND g.date >= ?
+        WHERE g.status IN (7,8,9,10) AND g.date >= ?
         GROUP BY o.game_id
         """,
         (since,),
@@ -225,7 +225,7 @@ def check_missing_closing(conn: sqlite3.Connection) -> Dict[str, Any]:
     rows = conn.execute(
         """
         SELECT g.id FROM games g
-        WHERE g.status IN (8,9,10) AND g.date >= ? AND g.date < ?
+        WHERE g.status IN (7,8,9,10) AND g.date >= ? AND g.date < ?
           AND NOT EXISTS (SELECT 1 FROM game_odds o WHERE o.game_id = g.id AND o.market_id = 1)
           AND EXISTS (SELECT 1 FROM games s JOIN game_odds so ON so.game_id = s.id AND so.market_id = 1
                       WHERE s.league_id = g.league_id AND s.season_year = g.season_year)
@@ -233,7 +233,7 @@ def check_missing_closing(conn: sqlite3.Connection) -> Dict[str, Any]:
         (_utc(days=30), _utc(hours=6)),
     ).fetchall()
     total = conn.execute(
-        "SELECT COUNT(*) FROM games g WHERE status IN (8,9,10) AND date >= ? AND date < ?" + _scope(),
+        "SELECT COUNT(*) FROM games g WHERE status IN (7,8,9,10) AND date >= ? AND date < ?" + _scope(),
         (_utc(days=30), _utc(hours=6)),
     ).fetchone()[0]
     ids = [r[0] for r in rows]
@@ -249,14 +249,14 @@ def check_missing_xg(conn: sqlite3.Connection) -> Dict[str, Any]:
     ids = [r[0] for r in conn.execute(
         """
         SELECT g.id FROM games g
-        WHERE g.status IN (8,9,10) AND g.date >= ? AND g.date < ?
+        WHERE g.status IN (7,8,9,10) AND g.date >= ? AND g.date < ?
           AND (g.calculated_xg_home IS NULL OR g.calculated_xg_away IS NULL)
           AND EXISTS (SELECT 1 FROM games s WHERE s.league_id = g.league_id AND s.season_year = g.season_year
                       AND s.calculated_xg_home IS NOT NULL)
         """ + _scope() + " ORDER BY g.date DESC",
         (since, _utc(hours=6)),
     )]
-    total = conn.execute("SELECT COUNT(*) FROM games g WHERE status IN (8,9,10) AND date >= ?" + _scope(), (since,)).fetchone()[0]
+    total = conn.execute("SELECT COUNT(*) FROM games g WHERE status IN (7,8,9,10) AND date >= ?" + _scope(), (since,)).fetchone()[0]
     return _check("xg_missing", "Lücken", "Beendete Spiele haben Match-xG",
                   "Letzte 12 Monate, beobachtete Ligen, nur Saisons mit xG. Fehlendes xG verfälscht „xG Saison“, Power und Tempo.",
                   len(ids), total, _level(len(ids), total, 2.0, 10.0), _game_examples(conn, ids[:EXAMPLES]))
@@ -267,14 +267,14 @@ def check_missing_glicko(conn: sqlite3.Connection) -> Dict[str, Any]:
     ids = [r[0] for r in conn.execute(
         """
         SELECT g.id FROM games g
-        WHERE g.status IN (8,9,10) AND g.date >= ? AND g.date < ?
+        WHERE g.status IN (7,8,9,10) AND g.date >= ? AND g.date < ?
           AND NOT EXISTS (SELECT 1 FROM game_glicko gl WHERE gl.game_id = g.id AND gl.home_rating IS NOT NULL)
           AND EXISTS (SELECT 1 FROM games s JOIN game_glicko sg ON sg.game_id = s.id
                       WHERE s.league_id = g.league_id AND s.season_year = g.season_year)
         """ + _scope() + " ORDER BY g.date DESC",
         (since, _utc(hours=6)),
     )]
-    total = conn.execute("SELECT COUNT(*) FROM games g WHERE status IN (8,9,10) AND date >= ?" + _scope(), (since,)).fetchone()[0]
+    total = conn.execute("SELECT COUNT(*) FROM games g WHERE status IN (7,8,9,10) AND date >= ?" + _scope(), (since,)).fetchone()[0]
     return _check("glicko_missing", "Lücken", "Beendete Spiele haben Glicko",
                   "Letzte 12 Monate, beobachtete Ligen, nur Saisons mit Glicko.",
                   len(ids), total, _level(len(ids), total, 2.0, 10.0), _game_examples(conn, ids[:EXAMPLES]))
@@ -285,14 +285,14 @@ def check_missing_form2(conn: sqlite3.Connection) -> Dict[str, Any]:
     ids = [r[0] for r in conn.execute(
         """
         SELECT g.id FROM games g
-        WHERE g.status IN (8,9,10) AND g.date >= ?
+        WHERE g.status IN (7,8,9,10) AND g.date >= ?
           AND NOT EXISTS (SELECT 1 FROM game_form2 f WHERE f.game_id = g.id)
           AND EXISTS (SELECT 1 FROM games s JOIN game_form2 sf ON sf.game_id = s.id
                       WHERE s.league_id = g.league_id AND s.season_year = g.season_year)
         """ + _scope() + " ORDER BY g.date DESC",
         (since,),
     )]
-    total = conn.execute("SELECT COUNT(*) FROM games g WHERE status IN (8,9,10) AND date >= ?" + _scope(), (since,)).fetchone()[0]
+    total = conn.execute("SELECT COUNT(*) FROM games g WHERE status IN (7,8,9,10) AND date >= ?" + _scope(), (since,)).fetchone()[0]
     return _check("form2_missing", "Lücken", "Beendete Spiele haben xG Saison / Power / Tempo",
                   "Letzte 12 Monate, beobachtete Ligen, nur Saisons, für die Form2 berechnet wird.",
                   len(ids), total, _level(len(ids), total, 1.0, 5.0), _game_examples(conn, ids[:EXAMPLES]))
@@ -302,7 +302,7 @@ def check_missing_form2(conn: sqlite3.Connection) -> Dict[str, Any]:
 
 def check_status(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
     live = [r[0] for r in conn.execute(
-        "SELECT id FROM games WHERE status NOT IN (8,9,10) AND date < ? ORDER BY date DESC", (_utc(hours=4),)
+        "SELECT id FROM games WHERE status NOT IN (7,8,9,10) AND date < ? ORDER BY date DESC", (_utc(hours=4),)
     )]
     total = conn.execute("SELECT COUNT(*) FROM games").fetchone()[0]
     stale = conn.execute(
@@ -346,7 +346,7 @@ def check_score_sanity(conn: sqlite3.Connection) -> Dict[str, Any]:
     bad: Dict[int, str] = {}
     for gid, h, a, tg, hx, ax in conn.execute(
         """SELECT id, home_ft_result, away_ft_result, total_goals, calculated_xg_home, calculated_xg_away
-           FROM games WHERE status IN (8,9,10) ORDER BY date DESC"""
+           FROM games WHERE status IN (7,8,9,10) ORDER BY date DESC"""
     ):
         if h is None or a is None:
             bad[gid] = "Endstand fehlt"
@@ -356,7 +356,7 @@ def check_score_sanity(conn: sqlite3.Connection) -> Dict[str, Any]:
             bad[gid] = f"Tore gesamt {tg}, nach 90 Min. {h + a}"
         elif (hx is not None and (hx < 0 or hx > 12)) or (ax is not None and (ax < 0 or ax > 12)):
             bad[gid] = f"xG {hx}/{ax}"
-    total = conn.execute("SELECT COUNT(*) FROM games WHERE status IN (8,9,10)").fetchone()[0]
+    total = conn.execute("SELECT COUNT(*) FROM games WHERE status IN (7,8,9,10)").fetchone()[0]
     return _check("score_sanity", "Konsistenz", "Endstand, Tore und xG plausibel",
                   "Fehlender Endstand, mehr als 15 Tore, xG unter 0 oder über 12 — oder „Tore gesamt“ zählt die "
                   "Verlängerung mit. Strategie-Backtests und Verifikation rechnen mit dem Stand nach 90 Minuten "
