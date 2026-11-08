@@ -227,6 +227,47 @@ def data_quality_run():
     return {"started": dq_svc.start()}
 
 
+@app.get("/api/ml/catalog")
+def ml_catalog():
+    from services import ml_service
+
+    return ml_service.catalog()
+
+
+@app.get("/api/ml/runs")
+def ml_runs():
+    from services import ml_service
+
+    return ml_service.runs()
+
+
+@app.post("/api/ml/run")
+def ml_run(cfg: Dict[str, Any] = Body(...)):
+    from services import ml_service
+
+    try:
+        return ml_service.start(cfg or {})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/ml/runs/{run_id}")
+def ml_run_detail(run_id: str):
+    from services import ml_service
+
+    run = ml_service.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Lauf nicht gefunden")
+    return run
+
+
+@app.delete("/api/ml/runs/{run_id}")
+def ml_run_delete(run_id: str):
+    from services import ml_service
+
+    return {"deleted": ml_service.delete_run(run_id)}
+
+
 @app.post("/api/strategy/analyze")
 def strategy_analyze(
     filters: Dict[str, Any] = Body(...),

@@ -49,6 +49,11 @@ export const api = {
   stats: (top = 12) => get(`/api/stats?top=${top}`),
   dataQuality: () => get('/api/data-quality'),
   dataQualityRun: () => post('/api/data-quality/run'),
+  mlCatalog: () => get('/api/ml/catalog'),
+  mlRuns: () => get('/api/ml/runs'),
+  mlRun: (id) => get(`/api/ml/runs/${encodeURIComponent(id)}`),
+  mlStart: (cfg) => post('/api/ml/run', cfg),
+  mlDelete: (id) => del(`/api/ml/runs/${encodeURIComponent(id)}`),
   strategyAnalyze: (filters, limit = 200) =>
     post(`/api/strategy/analyze?limit=${limit}`, filters),
   strategyUpcoming: (filters, limit = 200) =>

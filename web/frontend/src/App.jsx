@@ -10,6 +10,7 @@ import FeaturesPage from './pages/FeaturesPage'
 import SettingsPage from './pages/SettingsPage'
 import VerificationPage from './pages/VerificationPage'
 import AssistantPage from './pages/AssistantPage'
+import MLPage from './pages/MLPage'
 import SwisslosApp from './pages/SwisslosApp'
 import './App.css'
 
@@ -39,6 +40,7 @@ export default function App() {
           <NavLink to="/strategy">Strategie</NavLink>
           <NavLink to="/verification">Verifikation</NavLink>
           <NavLink to="/assistant">Wett-Assistent</NavLink>
+          <NavLink to="/ml">Machine Learning</NavLink>
           <NavLink to="/features">Features</NavLink>
           <NavLink to="/stats">DB Statistik</NavLink>
           <NavLink to="/sstats">SStats Params</NavLink>
@@ -61,6 +63,7 @@ export default function App() {
         <Route path="/strategy" element={<StrategyPage />} />
         <Route path="/verification" element={<VerificationPage />} />
         <Route path="/assistant" element={<AssistantPage />} />
+        <Route path="/ml" element={<MLPage />} />
         <Route path="/past" element={<Navigate to="/strategy" replace />} />
         <Route path="/features" element={<FeaturesPage />} />
         <Route path="/stats" element={<StatsPage />} />

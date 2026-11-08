@@ -7,3 +7,4 @@ uvicorn[standard]
 websocket-client
 tzdata
 PySocks
+scikit-learn
