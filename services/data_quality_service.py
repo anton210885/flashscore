@@ -130,6 +130,32 @@ def check_glicko_leak(conn: sqlite3.Connection) -> Dict[str, Any]:
                   1 if level == "error" else 0, after["n"], level, stats=stats)
 
 
+def check_glicko_frozen(conn: sqlite3.Connection, days: int = 3) -> Dict[str, Any]:
+    """Neue Spiele: Glicko muss vor Anpfiff geholt und danach eingefroren sein (ehrliche Backtests)."""
+    rows = conn.execute(
+        f"""
+        SELECT g.id, (julianday(datetime(g.date)) - julianday(datetime(gl.created_at))) * 24
+        FROM games g JOIN game_glicko gl ON gl.game_id = g.id
+        WHERE g.status IN (7,8,9,10) AND g.date >= ? AND gl.created_at IS NOT NULL{_scope()}
+        ORDER BY g.date DESC
+        """,
+        (_utc(days=days),),
+    ).fetchall()
+    late = [gid for gid, h in rows if h is None or h <= 0]
+    before = sorted(h for _, h in rows if h is not None and h > 0)
+    median = round(before[len(before) // 2], 1) if before else None
+    total = len(rows)
+    detail = (
+        f"Beendete Spiele der letzten {days} Tage mit Glicko: {total}. Vor Anpfiff geholt: {len(before)}"
+        + (f" (Median {median} h vor Anpfiff)" if median is not None else "")
+        + f". Erst nach Anpfiff geholt: {len(late)} — diese Werte kennen schon den Closing-Markt "
+        "und sind für Backtests zu optimistisch."
+    )
+    return _check("glicko_frozen", "Look-ahead", "Glicko vor Anpfiff eingefroren", detail,
+                  len(late), total, _level(len(late), total, 25, 60),
+                  _game_examples(conn, late[:8]), median_hours_before=median)
+
+
 def check_form2_order(conn: sqlite3.Connection, sample: int = 300) -> Dict[str, Any]:
     """Stichprobe: Anzahl Spiele in xG Saison (home_n) = frühere Spiele des Teams mit xG in derselben Saison."""
     ids = [r[0] for r in conn.execute(
@@ -406,7 +432,7 @@ def check_verification(conn: sqlite3.Connection) -> Dict[str, Any]:
 
 
 CHECKS: List[Callable[[sqlite3.Connection], Any]] = [
-    check_glicko_leak, check_form2_order,
+    check_glicko_leak, check_glicko_frozen, check_form2_order,
     check_odds, check_missing_closing,
     check_missing_xg, check_missing_glicko, check_missing_form2,
     check_status, check_duplicates, check_score_sanity,

@@ -674,6 +674,33 @@ class DatabaseManager:
         conn.commit()
         return n
 
+    def glicko_frozen(self, game_id: int) -> bool:
+        """True, wenn ein vor Anpfiff geholter Glicko-Stand existiert und das Spiel begonnen hat.
+
+        Glicko von sstats nach Anpfiff liegt nah am Closing-Markt (Look-ahead) — dieser Stand
+        darf einen ehrlichen Vor-Anpfiff-Stand nicht überschreiben. created_at ist UTC.
+        """
+        conn = self.get_connection()
+        row = conn.execute(
+            """
+            SELECT 1 FROM game_glicko gl
+            WHERE gl.game_id = ?
+              AND gl.created_at IS NOT NULL
+              AND EXISTS (
+                SELECT 1 FROM (
+                    SELECT datetime(date) AS ko FROM games WHERE id = gl.game_id
+                    UNION ALL
+                    SELECT datetime(date) FROM upcoming_games WHERE id = gl.game_id
+                ) k
+                WHERE k.ko IS NOT NULL
+                  AND datetime(gl.created_at) < k.ko
+                  AND datetime('now') >= k.ko
+              )
+            """,
+            (int(game_id),),
+        ).fetchone()
+        return row is not None
+
     def save_glicko(self, game_id: int, glicko_data: Dict[str, Any]) -> bool:
         """Save Glicko ratings and predictions for a game
         
@@ -712,7 +739,10 @@ class DatabaseManager:
             draw_prob = None
             if home_win_prob is not None and away_win_prob is not None:
                 draw_prob = max(0.0, 1.0 - home_win_prob - away_win_prob)
-            
+
+            if self.glicko_frozen(game_id):
+                return True  # Stand vor Anpfiff bleibt — nach Anpfiff enthält sstats Marktinfo
+
             # Insert or replace Glicko data
             conn.execute("""
                 INSERT OR REPLACE INTO game_glicko (

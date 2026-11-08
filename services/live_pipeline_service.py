@@ -964,6 +964,12 @@ class LivePipelineService:
                         gl.game_id IS NULL
                         OR gl.home_xg IS NULL
                         OR gl.away_xg IS NULL
+                        -- letzter Stand vor dem Einfrieren: in den 3 h vor Anpfiff einmal nachladen
+                        OR (
+                          datetime(u.date) > datetime('now')
+                          AND datetime(u.date) <= datetime('now', '+3 hours')
+                          AND datetime(gl.created_at) < datetime(u.date, '-3 hours')
+                        )
                       )
                       AND {due_sql}
                     ORDER BY u.date ASC
