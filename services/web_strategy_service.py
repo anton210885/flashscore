@@ -230,7 +230,8 @@ def analyze(
         query += " AND games_count_home_win >= ?"
         params.append(mg)
 
-    query += " ORDER BY g.date DESC LIMIT 12000"
+    # Ganze Geschichte: früher LIMIT 12000 → Backtests sahen nur die letzten ~3 Wochen
+    query += " ORDER BY g.date DESC"
 
     conn = _conn()
     try:
