@@ -1,6 +1,6 @@
-"""strategy_builder package — automatic strategy discovery for Flashscore."""
+"""strategy_builder — automatische Strategie-Suche für Flashscore (Lernzeitraum → Prüfzeitraum)."""
 
-from .searcher import run_search, pretty_print
 from .search_space import SEARCH_SPACE, sample_combination
+from .searcher import pretty_print, run_search
 
 __all__ = ["run_search", "pretty_print", "SEARCH_SPACE", "sample_combination"]

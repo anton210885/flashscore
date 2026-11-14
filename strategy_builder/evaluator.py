@@ -1,124 +1,169 @@
-"""Evaluate a single strategy combination using real strategy_service logic."""
+"""Daten laden und Kombinationen bewerten — vektorisiert, gleiche Regeln wie die Strategie-Seite.
 
-from typing import Dict, Any, List, Optional
+Quoten, Abrechnung (1 Einheit), xROI und Power/Tempo entsprechen services/strategy_service.py,
+damit eine gefundene Kombination als Strategie gespeichert dasselbe Ergebnis liefert.
+"""
+from __future__ import annotations
+
+import math
+import sqlite3
 import sys
 from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 
-# Make sure we can import from the parent project
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import numpy as np
+import pandas as pd
 
-from services import strategy_service as ss
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from strategy_builder.search_space import METRICS  # noqa: E402
+
+DB_PATH = ROOT / "data" / "flashscore.db"
+
+# Markt → (Closing-Spalte, Opening-Spalte) wie strategy_service.MARKET_DEFS
+ODDS_COLS = {
+    "Home": ("odd_home", "odd_open_home"),
+    "Draw": ("odd_draw", "odd_open_draw"),
+    "Away": ("odd_away", "odd_open_away"),
+    "Over 2.5": ("odd_over_25", "odd_open_over_25"),
+    "Under 2.5": ("odd_under_25", "odd_open_under_25"),
+}
+MARKET_FILTER_KEY = {"Home": "home", "Draw": "draw", "Away": "away", "Over 2.5": "over", "Under 2.5": "under"}
+
+_QUERY = """
+SELECT g.game_id, g.date, g.league_id, g.country_name, g.league_name,
+       g.home_ft_result AS hg, g.away_ft_result AS ag,
+       g.home_rating, g.away_rating, g.xg_glicko_home, g.xg_glicko_away,
+       o.odd_home, o.odd_draw, o.odd_away, o.odd_over_25, o.odd_under_25,
+       o.odd_open_home, o.odd_open_draw, o.odd_open_away, o.odd_open_over_25, o.odd_open_under_25,
+       f2.home_xg AS f2_home_xg, f2.away_xg AS f2_away_xg,
+       f2.home_avg_xg, f2.home_avg_xga, f2.away_avg_xg, f2.away_avg_xga,
+       f2.hometeam_home_xg, f2.hometeam_home_xga, f2.awayteam_away_xg, f2.awayteam_away_xga,
+       f2.hometeam_pred_xg, f2.awayteam_pred_xg
+FROM game_details_view g
+LEFT JOIN game_odds_pivoted o ON o.game_id = g.game_id
+LEFT JOIN game_form2 f2 ON f2.game_id = g.game_id
+WHERE g.home_ft_result IS NOT NULL AND g.away_ft_result IS NOT NULL
+"""
+
+
+def _div(a: pd.Series, b: pd.Series) -> pd.Series:
+    return a.where(b > 0) / b.where(b > 0)
+
+
+def load_rows(db: Optional[str] = None, scope_only: bool = False) -> pd.DataFrame:
+    conn = sqlite3.connect(f"file:{db or DB_PATH}?mode=ro", uri=True, timeout=30)
+    try:
+        df = pd.read_sql_query(_QUERY, conn)
+    finally:
+        conn.close()
+    if scope_only:
+        from services.league_scope import active_league_ids
+        ids = active_league_ids()
+        if ids:
+            df = df[df.league_id.isin(list(ids))]
+    df["date"] = pd.to_datetime(df["date"], utc=True, errors="coerce")
+    df = df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+    # Attribute wie strategy_service._comparison_attr_value / power_tempo_value
+    attrs = pd.DataFrame(index=df.index)
+    attrs["power_home"] = _div(df.home_avg_xg, df.home_avg_xga)
+    attrs["power_away"] = _div(df.away_avg_xg, df.away_avg_xga)
+    attrs["tempo_home"] = df.home_avg_xg + df.home_avg_xga
+    attrs["tempo_away"] = df.away_avg_xg + df.away_avg_xga
+    attrs["power_home_venue"] = _div(df.hometeam_home_xg, df.hometeam_home_xga)
+    attrs["power_away_venue"] = _div(df.awayteam_away_xg, df.awayteam_away_xga)
+    attrs["xg_form2_home"], attrs["xg_form2_away"] = df.f2_home_xg, df.f2_away_xg
+    attrs["form2_avg_xg_home"], attrs["form2_avg_xg_away"] = df.home_avg_xg, df.away_avg_xg
+    attrs["form2_avg_xga_home"], attrs["form2_avg_xga_away"] = df.home_avg_xga, df.away_avg_xga
+    attrs["hometeam_pred_xg"], attrs["awayteam_pred_xg"] = df.hometeam_pred_xg, df.awayteam_pred_xg
+    attrs["rating_home"], attrs["rating_away"] = df.home_rating, df.away_rating
+    attrs["xg_home_glicko"], attrs["xg_away_glicko"] = df.xg_glicko_home, df.xg_glicko_away
+    for name, (a1, op, a2, _label, _gl) in METRICS.items():
+        x, y = attrs[a1].astype(float), attrs[a2].astype(float)
+        df[f"m_{name}"] = x - y if op == "-" else x + y if op == "+" else _div(x, y)
+    return df
+
+
+def market_arrays(df: pd.DataFrame, market: str, odds_type: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(Quote der Wette, Profit je 1 Einheit, xROI %) — NaN, wo keine gültige Quote."""
+    close_col, open_col = ODDS_COLS[market]
+    odds = pd.to_numeric(df[open_col if odds_type == "opening" else close_col], errors="coerce").to_numpy(float)
+    odds = np.where(odds > 1.0, odds, np.nan)
+    hg, ag = df.hg.to_numpy(float), df.ag.to_numpy(float)
+    won = {"Home": hg > ag, "Away": ag > hg, "Draw": hg == ag,
+           "Over 2.5": hg + ag > 2.5, "Under 2.5": hg + ag <= 2.5}[market]
+    profit = np.where(np.isnan(odds), np.nan, np.where(won, odds - 1.0, -1.0))
+    o = pd.to_numeric(df[open_col], errors="coerce").to_numpy(float)
+    c = pd.to_numeric(df[close_col], errors="coerce").to_numpy(float)
+    xroi = np.where((o > 1) & (c > 1), (o - c) / c * 100.0, np.nan)
+    return odds, profit, xroi
+
+
+def stats(profit: np.ndarray, xroi: np.ndarray, odds: np.ndarray) -> Dict[str, Any]:
+    n = int(len(profit))
+    if not n:
+        return {"n": 0}
+    m = float(profit.mean())
+    se = float(profit.std(ddof=1) / math.sqrt(n)) if n > 1 else float("nan")
+    xr = xroi[~np.isnan(xroi)]
+    return {
+        "n": n,
+        "roi": round(m * 100, 2),
+        "roi_lo": round((m - 1.96 * se) * 100, 2) if n > 1 else None,
+        "roi_hi": round((m + 1.96 * se) * 100, 2) if n > 1 else None,
+        "profit": round(float(profit.sum()), 2),
+        "hit": round(float((profit > 0).mean() * 100), 1),
+        "avg_odds": round(float(odds.mean()), 2),
+        "xroi": round(float(xr.mean()), 2) if len(xr) else None,
+        "xroi_n": int(len(xr)),
+    }
+
+
+def combo_mask(df: pd.DataFrame, combo: Dict[str, Any], odds: np.ndarray) -> np.ndarray:
+    lo, hi = combo["odds_band"]
+    mask = ~np.isnan(odds) & (odds >= lo) & (odds <= hi)
+    if combo.get("metric"):
+        v = df[f"m_{combo['metric']}"].to_numpy(float)
+        thr = float(combo["threshold"])
+        mask &= (v >= thr) if combo["direction"] == ">=" else (v <= thr)
+    return mask
+
+
+def evaluate_combination(combo: Dict[str, Any], df: pd.DataFrame, period: Optional[np.ndarray] = None) -> Dict[str, Any]:
+    """Kennzahlen einer Kombination (optional nur auf einem Zeitraum-Maske)."""
+    odds, profit, xroi = market_arrays(df, combo["market"], combo.get("odds_type", "opening"))
+    mask = combo_mask(df, combo, odds)
+    if period is not None:
+        mask &= period
+    return {**stats(profit[mask], xroi[mask], odds[mask]), "combo": combo}
 
 
 def combo_to_filters(combo: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert our internal combo dict into the filter format expected by strategy_service."""
-    filters: Dict[str, Any] = {}
-
-    # Odds ranges
-    if "home_odds" in combo and combo["home_odds"]:
-        lo, hi = combo["home_odds"]
-        filters["odds_home_min"] = lo
-        filters["odds_home_max"] = hi
-        filters["market_home"] = True
-
-    if "over25_odds" in combo and combo["over25_odds"]:
-        lo, hi = combo["over25_odds"]
-        filters["odds_over_min"] = lo
-        filters["odds_over_max"] = hi
-        filters["market_over"] = True
-
-    if "away_odds" in combo and combo["away_odds"]:
-        lo, hi = combo["away_odds"]
-        filters["odds_away_min"] = lo
-        filters["odds_away_max"] = hi
-        filters["market_away"] = True
-
-    # Opening vs closing
-    if combo.get("use_opening_odds"):
-        filters["odds_type"] = "opening"
-    else:
-        filters["odds_type"] = "closing"
-
-    # Min games
-    if "min_games" in combo:
-        filters["min_games"] = combo["min_games"]
-
-    return filters
-
-
-def evaluate_combination(
-    combo: Dict[str, Any],
-    historical_rows: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """
-    Apply filters from combo and compute real metrics via strategy_service.
-    """
-    if not historical_rows:
-        return {"valid": False, "n_bets": 0, "reason": "no data"}
-
-    filters = combo_to_filters(combo)
-    odds_type = filters.get("odds_type", "closing")
-
-    # First pass: basic odds + min_games filtering using existing helpers
-    candidate_rows = []
-    for row in historical_rows:
-        # Check main market odds range
-        market = "Home" if filters.get("market_home") else "Over 2.5"
-        odds = ss.pick_odds(row, market, odds_type)
-        if odds is None:
-            continue
-
-        omin, omax = ss.odds_range_for_market(filters, market)
-        if not ss.in_range(odds, omin, omax):
-            continue
-
-        # Other market odds constraints
-        if not ss.passes_other_market_odds(filters, row, odds_type, fallback_closing=True):
-            continue
-
-        candidate_rows.append(row)
-
-    # Apply xG percentile filter if requested
-    xg_param = combo.get("xg_param")
-    xg_pct = combo.get("xg_percentile")
-    if xg_param and xg_pct and candidate_rows:
-        candidate_rows = ss.apply_percentile_filter(candidate_rows, float(xg_pct), xg_param)
-
-    n = len(candidate_rows)
-    min_games = combo.get("min_games", 6)
-    if n < min_games:
-        return {
-            "valid": False,
-            "n_bets": n,
-            "reason": f"too few bets ({n} < {min_games})",
-            "combo": combo,
-        }
-
-    # Compute real stats
-    # We treat the selected market as the one we bet on
-    selected_markets = ss.selected_markets_from_filters(filters)
-    stats_list = ss.compute_per_market_stats(
-        candidate_rows,
-        filters,
-        selected_markets=selected_markets,
-        odds_type=odds_type,
-        only_unselected=False,
-        skip_prematch_filters=True,  # we already filtered
-    )
-
-    # Aggregate across markets (simple average for now)
-    if not stats_list:
-        return {"valid": False, "n_bets": n, "reason": "no stats", "combo": combo}
-
-    # Take the primary market stats
-    primary = stats_list[0]
-    return {
-        "valid": True,
-        "n_bets": n,
-        "roi": primary.get("roi"),
-        "xroi": primary.get("xroi"),
-        "winrate": primary.get("percent"),
-        "profit": primary.get("profit"),
-        "combo": combo,
-        "primary_market": primary.get("market"),
+    """Kombination → Filter der Strategie-Seite (Preset)."""
+    key = MARKET_FILTER_KEY[combo["market"]]
+    lo, hi = combo["odds_band"]
+    f: Dict[str, Any] = {
+        f"market_{key}": True,
+        "odds_type": combo.get("odds_type", "opening"),
+        f"odds_{key}_min": str(lo),
+        f"odds_{key}_max": str(hi),
     }
+    if combo.get("metric"):
+        a1, op, a2, _label, _gl = METRICS[combo["metric"]]
+        f.update({
+            "use_xg_comparison": True,
+            "xg_attr1": a1, "xg_operation": op, "xg_attr2": a2,
+            "xg_comparison_operator": combo["direction"],
+            "xg_comparison_value": str(round(float(combo["threshold"]), 4)),
+            "xg_comparisons": [],
+        })
+    return f
+
+
+def describe(combo: Dict[str, Any]) -> str:
+    lo, hi = combo["odds_band"]
+    s = f"{combo['market']} {lo:g}–{hi:g} ({combo.get('odds_type', 'opening')})"
+    if combo.get("metric"):
+        s += f" · {METRICS[combo['metric']][3]} {combo['direction']} {round(float(combo['threshold']), 3):g}"
+    return s

@@ -1,37 +1,59 @@
-"""Automatic selection of the best pre-match xG parameter for a given odds setup."""
+"""Für ein festes Markt-/Quotenband die beste Vor-Spiel-Bedingung finden — nur auf dem Lernzeitraum."""
+from __future__ import annotations
 
-from typing import Dict, Any, List, Tuple
-from .search_space import XG_PARAMS
-from .evaluator import evaluate_combination
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+
+from .evaluator import market_arrays, stats
+from .search_space import DIRECTIONS, QUANTILES, metric_names
 
 
-def select_best_xg(
-    base_combo: Dict[str, Any],
-    historical_rows: List[Dict[str, Any]],
-    percentiles: List[int] | None = None,
-) -> Tuple[str, int, Dict[str, Any]]:
+def score(s: Dict[str, Any]) -> float:
+    """Untere 95 %-Grenze des ROI: bestraft kleine Stichproben (Zufallstreffer)."""
+    return s["roi_lo"] if s.get("roi_lo") is not None else float("-inf")
+
+
+def candidates(
+    df: pd.DataFrame,
+    base: Dict[str, Any],
+    train: np.ndarray,
+    *,
+    min_bets: int,
+    include_glicko: bool,
+    quantiles: Optional[List[float]] = None,
+) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+    """Alle Bedingungen (Metrik × Schwelle × Richtung) für base auswerten → [(combo, train_stats)].
+
+    Schwellen sind Quantile der Metrik innerhalb des Quotenbands im Lernzeitraum.
     """
-    Try several xG parameters and percentiles.
-    Return (best_param, best_percentile, best_metrics).
-    """
-    percentiles = percentiles or [70, 80, 90]
-    best_score = float("-inf")
-    best = None
+    odds, profit, xroi = market_arrays(df, base["market"], base["odds_type"])
+    lo, hi = base["odds_band"]
+    band = ~np.isnan(odds) & (odds >= lo) & (odds <= hi)
+    bt = band & train
+    out = []
+    if bt.sum() >= min_bets:
+        out.append(({**base, "metric": None}, stats(profit[bt], xroi[bt], odds[bt])))
+    for metric in metric_names(include_glicko):
+        v = df[f"m_{metric}"].to_numpy(float)
+        ok = bt & ~np.isnan(v)
+        if ok.sum() < min_bets:
+            continue
+        thresholds = np.unique(np.round(np.quantile(v[ok], quantiles or QUANTILES), 4))
+        for thr in thresholds:
+            for d in DIRECTIONS:
+                m = ok & ((v >= thr) if d == ">=" else (v <= thr))
+                if m.sum() < min_bets:
+                    continue
+                combo = {**base, "metric": metric, "threshold": float(thr), "direction": d}
+                out.append((combo, stats(profit[m], xroi[m], odds[m])))
+    return out
 
-    for param in XG_PARAMS:
-        for pct in percentiles:
-            combo = {**base_combo, "xg_param": param, "xg_percentile": pct}
-            result = evaluate_combination(combo, historical_rows)
-            if not result.get("valid"):
-                continue
-            # Prefer higher xROI, then higher number of bets
-            score = result.get("xroi", 0) + 0.001 * result.get("n_bets", 0)
-            if score > best_score:
-                best_score = score
-                best = (param, pct, result)
 
-    if best is None:
-        # fallback
-        return XG_PARAMS[0], 70, {"valid": False, "n_bets": 0}
-
-    return best
+def select_best_xg(df, base, train, *, min_bets=100, include_glicko=False):
+    """(beste Kombination, ihre Lern-Kennzahlen) oder (None, None)."""
+    cands = candidates(df, base, train, min_bets=min_bets, include_glicko=include_glicko)
+    if not cands:
+        return None, None
+    return max(cands, key=lambda c: score(c[1]))

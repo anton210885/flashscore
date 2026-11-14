@@ -227,6 +227,57 @@ def data_quality_run():
     return {"started": dq_svc.start()}
 
 
+@app.get("/api/builder/catalog")
+def builder_catalog():
+    from services import strategy_builder_service as sb
+
+    return sb.catalog()
+
+
+@app.get("/api/builder/runs")
+def builder_runs():
+    from services import strategy_builder_service as sb
+
+    return sb.runs()
+
+
+@app.post("/api/builder/run")
+def builder_run(cfg: Dict[str, Any] = Body(...)):
+    from services import strategy_builder_service as sb
+
+    try:
+        return sb.start(cfg or {})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/builder/runs/{run_id}")
+def builder_run_detail(run_id: str):
+    from services import strategy_builder_service as sb
+
+    run = sb.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Suche nicht gefunden")
+    return run
+
+
+@app.delete("/api/builder/runs/{run_id}")
+def builder_run_delete(run_id: str):
+    from services import strategy_builder_service as sb
+
+    return {"deleted": sb.delete_run(run_id)}
+
+
+@app.post("/api/builder/runs/{run_id}/save")
+def builder_save_preset(run_id: str, body: Dict[str, Any] = Body(...)):
+    from services import strategy_builder_service as sb
+
+    try:
+        return sb.save_as_preset(run_id, int(body.get("index", -1)), str(body.get("name") or ""))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/api/ml/catalog")
 def ml_catalog():
     from services import ml_service

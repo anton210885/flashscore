@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
+import StrategyBuilderBlock from '../components/StrategyBuilderBlock'
 
 const num = (v, d = 2) =>
   v == null || Number.isNaN(v) ? '—' : Number(v).toLocaleString('de-CH', { minimumFractionDigits: d, maximumFractionDigits: d })
@@ -205,6 +206,7 @@ function StrategyDetail({ res }) {
 }
 
 export default function MLPage() {
+  const [tab, setTab] = useState('models')
   const [catalog, setCatalog] = useState(null)
   const [data, setData] = useState({ runs: [], running: {} })
   const [error, setError] = useState('')
@@ -342,6 +344,18 @@ export default function MLPage() {
         </div>
       </div>
 
+      <div className="ml-seg ml-tabs">
+        <button type="button" className={`nav-btn ${tab === 'models' ? '' : 'nav-btn--muted'}`} onClick={() => setTab('models')}>
+          Modelle
+        </button>
+        <button type="button" className={`nav-btn ${tab === 'builder' ? '' : 'nav-btn--muted'}`} onClick={() => setTab('builder')}>
+          Strategie-Builder
+        </button>
+      </div>
+
+      {tab === 'builder' ? <StrategyBuilderBlock /> : null}
+      {tab === 'models' ? (
+      <>
       {error ? <div className="error-banner">{error}</div> : null}
 
       <div className="ml-grid">
@@ -593,6 +607,8 @@ export default function MLPage() {
             </>
           ) : null}
         </section>
+      ) : null}
+      </>
       ) : null}
     </div>
   )

@@ -2115,3 +2115,10 @@ code {
 .ml-calib-a { background: var(--accent); }
 .ml-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin: 0 0.2rem 0 0.5rem; }
 .ml-checks input[type='checkbox'] { width: auto; min-width: 0; flex: none; margin: 0; }
+.ml-tabs { margin-bottom: 1rem; }
+.ml-checks-row { flex-direction: row; flex-wrap: wrap; gap: 0.3rem 0.9rem; }
+.ml-ok { background: rgba(52, 211, 153, 0.12); color: var(--green); border-radius: 8px; padding: 0.6rem 0.8rem; margin-bottom: 0.8rem; font-size: 0.88rem; }
+.ml-verdict { background: var(--bg-row); border-radius: 8px; padding: 0.7rem 0.9rem; margin-bottom: 0.8rem; font-size: 0.88rem; line-height: 1.45; }
+.ml-tag { margin-left: 0.4rem; font-size: 0.7rem; }
+.ml-save { font-size: 0.75rem; padding: 0.25rem 0.5rem; white-space: nowrap; }
+.ml-grid input[type='number'] { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 0.45rem 0.6rem; font: inherit; font-size: 0.88rem; }
