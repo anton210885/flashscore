@@ -27,7 +27,7 @@ def catalog() -> Dict[str, Any]:
 
     return {
         "markets": list(ODDS_BANDS),
-        "metrics": [{"id": k, "label": v[3], "glicko": v[4]} for k, v in METRICS.items()],
+        "metrics": [{"id": k, "label": v[3], "glicko": v[4], "kind": v[5]} for k, v in METRICS.items()],
         "bands": {k: [list(b) for b in v] for k, v in ODDS_BANDS.items()},
     }
 
@@ -46,7 +46,7 @@ def _validate(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "markets": markets,
         "odds_type": "closing" if cfg.get("odds_type") == "closing" else "opening",
         "split": split,
-        "min_bets": max(30, min(2000, int(cfg.get("min_bets") or 100))),
+        "min_bets": max(30, min(2000, int(cfg.get("min_bets") or 50))),
         "include_glicko": bool(cfg.get("include_glicko")),
         "scope_only": bool(cfg.get("scope_only")),
         "top_k": max(5, min(50, int(cfg.get("top_k") or 20))),

@@ -1,4 +1,4 @@
-"""Für ein festes Markt-/Quotenband die beste Vor-Spiel-Bedingung finden — nur auf dem Lernzeitraum."""
+"""Bedingungen für ein Markt-/Quotenband erzeugen und auf Lern- und Auswahlzeitraum bewerten."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -6,8 +6,30 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from .evaluator import market_arrays, stats
-from .search_space import DIRECTIONS, QUANTILES, metric_names
+from .evaluator import condition, market_arrays, stats
+from .search_space import MARKET_RULES, METRICS, metrics_for_market, round_step
+
+
+def thresholds(df: pd.DataFrame, train: np.ndarray, include_glicko: bool) -> Dict[Tuple[str, str], List[float]]:
+    """Grobe Schwellen je (Markt, Metrik): Quantile des ganzen Lernzeitraums, gerundet.
+
+    Bewusst nicht pro Quotenband — so gibt es wenige, runde, gut lesbare Werte (z. B. Power Diff ≥ 1.0).
+    """
+    out: Dict[Tuple[str, str], List[float]] = {}
+    for market, (_kind, direction, qs) in MARKET_RULES.items():
+        for metric in metrics_for_market(market, include_glicko):
+            v = df[f"m_{metric}"].to_numpy(float)[train]
+            v = v[~np.isnan(v)]
+            if len(v) < 100:
+                continue
+            if direction == "abs<=":
+                v = np.abs(v)
+            step = METRICS[metric][6]
+            vals = sorted({round_step(float(np.quantile(v, q)), step) for q in qs})
+            if direction == "abs<=":
+                vals = [x for x in vals if x > 0]
+            out[(market, metric)] = vals
+    return out
 
 
 def score(s: Dict[str, Any]) -> float:
@@ -19,41 +41,47 @@ def candidates(
     df: pd.DataFrame,
     base: Dict[str, Any],
     train: np.ndarray,
+    valid: np.ndarray,
+    thr: Dict[Tuple[str, str], List[float]],
     *,
     min_bets: int,
     include_glicko: bool,
-    quantiles: Optional[List[float]] = None,
-) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
-    """Alle Bedingungen (Metrik × Schwelle × Richtung) für base auswerten → [(combo, train_stats)].
-
-    Schwellen sind Quantile der Metrik innerhalb des Quotenbands im Lernzeitraum.
-    """
-    odds, profit, xroi = market_arrays(df, base["market"], base["odds_type"])
+) -> List[Dict[str, Any]]:
+    """Alle Bedingungen für base → [{combo, train, valid, pooled}] (nur mit genug Lern-Wetten)."""
+    market = base["market"]
+    odds, profit, xroi = market_arrays(df, market, base["odds_type"])
     lo, hi = base["odds_band"]
     band = ~np.isnan(odds) & (odds >= lo) & (odds <= hi)
-    bt = band & train
+    direction = MARKET_RULES[market][1]
+
+    def rate(combo: Dict[str, Any], mask: np.ndarray) -> Optional[Dict[str, Any]]:
+        mt, mv = mask & train, mask & valid
+        if mt.sum() < min_bets:
+            return None
+        both = mt | mv
+        return {
+            "combo": combo,
+            "train": stats(profit[mt], xroi[mt], odds[mt]),
+            "valid": stats(profit[mv], xroi[mv], odds[mv]),
+            "pooled": stats(profit[both], xroi[both], odds[both]),
+        }
+
     out = []
-    if bt.sum() >= min_bets:
-        out.append(({**base, "metric": None}, stats(profit[bt], xroi[bt], odds[bt])))
-    for metric in metric_names(include_glicko):
+    r = rate({**base, "metric": None}, band)
+    if r:
+        out.append(r)
+    for metric in metrics_for_market(market, include_glicko):
         v = df[f"m_{metric}"].to_numpy(float)
-        ok = bt & ~np.isnan(v)
-        if ok.sum() < min_bets:
-            continue
-        thresholds = np.unique(np.round(np.quantile(v[ok], quantiles or QUANTILES), 4))
-        for thr in thresholds:
-            for d in DIRECTIONS:
-                m = ok & ((v >= thr) if d == ">=" else (v <= thr))
-                if m.sum() < min_bets:
-                    continue
-                combo = {**base, "metric": metric, "threshold": float(thr), "direction": d}
-                out.append((combo, stats(profit[m], xroi[m], odds[m])))
+        for t in thr.get((market, metric), []):
+            r = rate({**base, "metric": metric, "direction": direction, "threshold": float(t)},
+                     band & condition(v, direction, float(t)))
+            if r:
+                out.append(r)
     return out
 
 
-def select_best_xg(df, base, train, *, min_bets=100, include_glicko=False):
-    """(beste Kombination, ihre Lern-Kennzahlen) oder (None, None)."""
-    cands = candidates(df, base, train, min_bets=min_bets, include_glicko=include_glicko)
-    if not cands:
-        return None, None
-    return max(cands, key=lambda c: score(c[1]))
+def select_best_xg(df, base, train, valid, *, min_bets=50, include_glicko=False):
+    """Beste Bedingung für base (nach Lern+Auswahl zusammen) oder None."""
+    thr = thresholds(df, train, include_glicko)
+    cands = candidates(df, base, train, valid, thr, min_bets=min_bets, include_glicko=include_glicko)
+    return max(cands, key=lambda c: score(c["pooled"])) if cands else None

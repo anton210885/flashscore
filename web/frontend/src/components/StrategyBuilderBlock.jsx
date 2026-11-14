@@ -21,7 +21,7 @@ export default function StrategyBuilderBlock() {
     odds_type: 'opening',
     autoSplit: true,
     split: '2026-09-01',
-    min_bets: 100,
+    min_bets: 50,
     include_glicko: false,
     scope_only: false,
   })
@@ -75,7 +75,7 @@ export default function StrategyBuilderBlock() {
         markets: cfg.markets,
         odds_type: cfg.odds_type,
         split: cfg.autoSplit ? null : cfg.split,
-        min_bets: Number(cfg.min_bets) || 100,
+        min_bets: Number(cfg.min_bets) || 50,
         include_glicko: cfg.include_glicko,
         scope_only: cfg.scope_only,
       })
@@ -116,8 +116,8 @@ export default function StrategyBuilderBlock() {
         <section className="strat-card">
           <h3>Neue Suche</h3>
           <p className="muted ml-help">
-            Probiert für jeden Markt jedes Quotenband und jede Vor-Spiel-Bedingung (Metrik ≥/≤ Schwelle) aus — aber nur
-            auf dem Lernzeitraum. Die besten werden danach auf dem Prüfzeitraum getestet.
+            Pro Markt nur passende Metriken (Heim/Remis/Auswärts: Differenzen, Über/Unter: Summen) mit groben Schwellen.
+            Ausgewählt wird nur, was im Lern- und im Auswahlzeitraum im Plus ist; der Prüfzeitraum bleibt unberührt.
           </p>
           <div className="strat-field">
             Märkte
@@ -143,6 +143,7 @@ export default function StrategyBuilderBlock() {
               type="number"
               min={30}
               step={10}
+              title="Weniger als 50 erhöht die Zahl der Zufallstreffer"
               value={cfg.min_bets}
               onChange={(e) => set('min_bets', e.target.value)}
             />
@@ -150,10 +151,13 @@ export default function StrategyBuilderBlock() {
           <div className="ml-checks">
             <label>
               <input type="checkbox" checked={cfg.autoSplit} onChange={(e) => set('autoSplit', e.target.checked)} />
-              Stichtag automatisch (ältere 70 % lernen, neuere 30 % prüfen)
+              Zeiträume automatisch (60 % lernen, 20 % auswählen, 20 % prüfen)
             </label>
             {!cfg.autoSplit ? (
-              <input type="date" value={cfg.split} onChange={(e) => set('split', e.target.value)} />
+              <label className="strat-field">
+                Prüfung ab (davor: Lernen, letztes Viertel = Auswahl)
+                <input type="date" value={cfg.split} onChange={(e) => set('split', e.target.value)} />
+              </label>
             ) : null}
             <label title="Glicko-Werte der Vergangenheit wurden oft erst nach Anpfiff geholt">
               <input
@@ -174,19 +178,19 @@ export default function StrategyBuilderBlock() {
         </section>
 
         <section className="strat-card ml-explain">
-          <h3>Warum Lern- und Prüfzeitraum?</h3>
+          <h3>Drei Zeitabschnitte</h3>
           <ul>
             <li>
-              Wer tausende Kombinationen auf denselben Daten ausprobiert, findet <b>immer</b> welche mit tollem ROI —
-              durch Zufall. Das sagt nichts über die Zukunft.
+              Wer viele Kombinationen auf denselben Daten ausprobiert, findet <b>immer</b> welche mit tollem ROI — durch
+              Zufall. Darum drei Abschnitte:
             </li>
             <li>
-              Deshalb zählt die Spalte <b>Prüfzeitraum</b>: Spiele, die bei der Suche nicht verwendet wurden. Bricht der ROI
-              dort ein, war es Zufall.
+              <b>Lernen</b>: alle Kombinationen bewerten. <b>Auswahl</b>: nur was auch hier im Plus ist, gilt als{' '}
+              <b>stabil</b>. Rangfolge nach der unteren Grenze des ROI über beide zusammen.
             </li>
             <li>
-              Sortiert wird nach der <b>unteren Grenze</b> des Lern-ROI — das bevorzugt Kombinationen mit vielen Wetten statt
-              Glückstreffer mit wenigen.
+              <b>Prüfung</b>: wird bei der Auswahl nie angeschaut. Erst hier zeigt sich, was hält. Würde man nach der Prüfung
+              auswählen, wäre sie nur ein weiterer Lernzeitraum.
             </li>
             <li>
               <b>xROI</b> = Opening gegen Closing (wie auf der Strategie-Seite). Positiv heisst: der Markt ist danach in deine
@@ -215,6 +219,7 @@ export default function StrategyBuilderBlock() {
                   <th>Quote</th>
                   <th>Stichtag</th>
                   <th className="num">Kombinationen</th>
+                  <th className="num">stabil</th>
                   <th className="num">Top: Lern-ROI Ø</th>
                   <th className="num">Top: Prüf-ROI Ø</th>
                   <th className="num">im Plus (Prüfung)</th>
@@ -233,8 +238,11 @@ export default function StrategyBuilderBlock() {
                     <td>{r.config?.odds_type}</td>
                     <td>{r.split || (r.status === 'error' ? <span className="diff-neg">{r.error}</span> : '—')}</td>
                     <td className="num">{r.summary?.n_tested ?? '—'}</td>
+                    <td className="num">{r.summary?.n_stable ?? '—'}</td>
                     <td className={`num ${cls(r.summary?.top_train_roi_avg)}`}>{signed(r.summary?.top_train_roi_avg)}</td>
-                    <td className={`num ${cls(r.summary?.top_test_roi_avg)}`}>{signed(r.summary?.top_test_roi_avg)}</td>
+                    <td className={`num ${cls(r.summary?.top_test_roi_weighted ?? r.summary?.top_test_roi_avg)}`}>
+                      {signed(r.summary?.top_test_roi_weighted ?? r.summary?.top_test_roi_avg)}
+                    </td>
                     <td className="num">
                       {r.summary ? `${r.summary.top_test_positive} / ${r.summary.top_test_n}` : '—'}
                     </td>
@@ -259,8 +267,10 @@ export default function StrategyBuilderBlock() {
             <div>
               <h2>Ergebnis der Suche</h2>
               <p className="page-sub">
-                {when(detail.created_at)} · {detail.seconds}s · Lernen {res.train_from} – {res.split} ({res.train_games}{' '}
-                Spiele) · Prüfen ab {res.split} bis {res.test_to} ({res.test_games} Spiele)
+                {when(detail.created_at)} · {detail.seconds}s · Lernen {res.train_from} – {res.valid_from || res.split} (
+                {res.train_games} Spiele)
+                {res.valid_from ? ` · Auswahl bis ${res.split} (${res.valid_games})` : ''} · Prüfung ab {res.split} bis{' '}
+                {res.test_to} ({res.test_games})
               </p>
             </div>
             <button type="button" className="nav-btn nav-btn--muted" onClick={() => setSelected(null)}>
@@ -268,14 +278,18 @@ export default function StrategyBuilderBlock() {
             </button>
           </div>
           <div className="ml-verdict">
-            {s.n_tested.toLocaleString('de-CH')} Kombinationen getestet — {num(s.train_positive_pct)} % davon waren im
-            Lernzeitraum im Plus. Die besten {s.top_test_n} hatten dort Ø {signed(s.top_train_roi_avg)}, im Prüfzeitraum Ø{' '}
-            <b className={cls(s.top_test_roi_avg)}>{signed(s.top_test_roi_avg)}</b> ({s.top_test_positive} von {s.top_test_n}{' '}
+            {s.n_tested.toLocaleString('de-CH')} Kombinationen getestet
+            {s.n_stable != null ? `, davon ${s.n_stable} stabil (Lernen und Auswahl im Plus)` : ''}. Die besten{' '}
+            {s.top_test_n} im Prüfzeitraum:{' '}
+            <b className={cls(s.top_test_roi_weighted ?? s.top_test_roi_avg)}>
+              {signed(s.top_test_roi_weighted ?? s.top_test_roi_avg)}
+            </b>
+            {s.top_test_bets ? ` über ${s.top_test_bets} Wetten (gewichtet)` : ''}, {s.top_test_positive} von {s.top_test_n}{' '}
             im Plus
-            {s.top_test_xroi_avg != null ? `, xROI Ø ${signed(s.top_test_xroi_avg, 2)}` : ''}).{' '}
-            {s.top_test_roi_avg != null && s.top_test_roi_avg < s.top_train_roi_avg / 2
-              ? 'Der Vorsprung aus dem Lernzeitraum hält nicht — das meiste war Zufall.'
-              : 'Ein Teil des Vorsprungs hält — Kandidaten in der Verifikation weiter beobachten.'}
+            {s.top_test_xroi_avg != null ? `, xROI Ø ${signed(s.top_test_xroi_avg, 2)}` : ''}.{' '}
+            {(s.top_test_roi_weighted ?? s.top_test_roi_avg) > 0
+              ? 'Ein Teil hält — Kandidaten als Strategie speichern und in der Verifikation beobachten.'
+              : 'Im Prüfzeitraum kein Vorteil — das meiste war Zufall.'}
           </div>
           <div className="table-wrap">
             <table className="data-table ml-small">
@@ -286,6 +300,8 @@ export default function StrategyBuilderBlock() {
                   <th className="num">Lern: Wetten</th>
                   <th className="num">Lern: ROI</th>
                   <th className="num">Lern: Spanne</th>
+                  <th className="num">Auswahl: Wetten</th>
+                  <th className="num">Auswahl: ROI</th>
                   <th className="num">Prüf: Wetten</th>
                   <th className="num">Prüf: ROI</th>
                   <th className="num">Prüf: Treffer</th>
@@ -300,10 +316,13 @@ export default function StrategyBuilderBlock() {
                     <td>
                       {r.label}
                       {r.glicko ? <span className="dq-chip dq-warn ml-tag">Glicko</span> : null}
+                      {r.stable === false ? <span className="dq-chip dq-info ml-tag">nicht stabil</span> : null}
                     </td>
                     <td className="num">{r.train.n}</td>
                     <td className={`num ${cls(r.train.roi)}`}>{signed(r.train.roi)}</td>
                     <td className="num muted">{span(r.train)}</td>
+                    <td className="num">{r.valid?.n ?? '—'}</td>
+                    <td className={`num ${cls(r.valid?.roi)}`}>{signed(r.valid?.roi)}</td>
                     <td className="num">{r.test.n ?? 0}</td>
                     <td className={`num ${cls(r.test.roi)}`}>{signed(r.test.roi)}</td>
                     <td className="num">{r.test.hit != null ? `${num(r.test.hit, 0)} %` : '—'}</td>

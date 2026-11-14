@@ -79,7 +79,7 @@ def load_rows(db: Optional[str] = None, scope_only: bool = False) -> pd.DataFram
     attrs["hometeam_pred_xg"], attrs["awayteam_pred_xg"] = df.hometeam_pred_xg, df.awayteam_pred_xg
     attrs["rating_home"], attrs["rating_away"] = df.home_rating, df.away_rating
     attrs["xg_home_glicko"], attrs["xg_away_glicko"] = df.xg_glicko_home, df.xg_glicko_away
-    for name, (a1, op, a2, _label, _gl) in METRICS.items():
+    for name, (a1, op, a2, *_rest) in METRICS.items():
         x, y = attrs[a1].astype(float), attrs[a2].astype(float)
         df[f"m_{name}"] = x - y if op == "-" else x + y if op == "+" else _div(x, y)
     return df
@@ -124,10 +124,20 @@ def combo_mask(df: pd.DataFrame, combo: Dict[str, Any], odds: np.ndarray) -> np.
     lo, hi = combo["odds_band"]
     mask = ~np.isnan(odds) & (odds >= lo) & (odds <= hi)
     if combo.get("metric"):
-        v = df[f"m_{combo['metric']}"].to_numpy(float)
-        thr = float(combo["threshold"])
-        mask &= (v >= thr) if combo["direction"] == ">=" else (v <= thr)
+        mask &= condition(df[f"m_{combo['metric']}"].to_numpy(float), combo["direction"], float(combo["threshold"]))
     return mask
+
+
+def condition(v: np.ndarray, direction: str, thr: float) -> np.ndarray:
+    """Bedingung auswerten; NaN zählt nie als erfüllt."""
+    with np.errstate(invalid="ignore"):
+        if direction == ">=":
+            return v >= thr
+        if direction == "<=":
+            return v <= thr
+        if direction == "abs<=":
+            return np.abs(v) <= thr
+    raise ValueError(f"Unbekannte Richtung: {direction}")
 
 
 def evaluate_combination(combo: Dict[str, Any], df: pd.DataFrame, period: Optional[np.ndarray] = None) -> Dict[str, Any]:
@@ -150,13 +160,18 @@ def combo_to_filters(combo: Dict[str, Any]) -> Dict[str, Any]:
         f"odds_{key}_max": str(hi),
     }
     if combo.get("metric"):
-        a1, op, a2, _label, _gl = METRICS[combo["metric"]]
+        a1, op, a2 = METRICS[combo["metric"]][:3]
+        thr = round(float(combo["threshold"]), 4)
+        d = combo["direction"]
         f.update({
             "use_xg_comparison": True,
             "xg_attr1": a1, "xg_operation": op, "xg_attr2": a2,
-            "xg_comparison_operator": combo["direction"],
-            "xg_comparison_value": str(round(float(combo["threshold"]), 4)),
-            "xg_comparisons": [],
+            "xg_comparison_operator": ">=" if d == "abs<=" else d,
+            "xg_comparison_value": str(-thr if d == "abs<=" else thr),
+            # |Diff| ≤ x  =  Diff ≥ −x  UND  Diff ≤ x
+            "xg_comparisons": ([{"attr1": a1, "operation": op, "attr2": a2,
+                                 "comparison_operator": "<=", "comparison_value": str(thr)}]
+                               if d == "abs<=" else []),
         })
     return f
 
@@ -165,5 +180,7 @@ def describe(combo: Dict[str, Any]) -> str:
     lo, hi = combo["odds_band"]
     s = f"{combo['market']} {lo:g}–{hi:g} ({combo.get('odds_type', 'opening')})"
     if combo.get("metric"):
-        s += f" · {METRICS[combo['metric']][3]} {combo['direction']} {round(float(combo['threshold']), 3):g}"
+        label, thr = METRICS[combo["metric"]][3], round(float(combo["threshold"]), 3)
+        s += (f" · |{label}| ≤ {thr:g}" if combo["direction"] == "abs<="
+              else f" · {label} {'≥' if combo['direction'] == '>=' else '≤'} {thr:g}")
     return s
