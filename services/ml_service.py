@@ -44,7 +44,36 @@ MODELS: Dict[str, Dict[str, Any]] = {
                  "help": "Viele kleine Entscheidungsbäume nacheinander — findet auch verschachtelte Muster."},
     "forest": {"label": "Random Forest", "modes": ["predict", "strategy"], "trains": True,
                "help": "Viele unabhängige Entscheidungsbäume, gemittelt — stabil, aber grob."},
+    "lgbm": {"label": "LightGBM", "modes": ["predict", "strategy"], "trains": True, "needs": "lightgbm",
+             "help": "Schnelles Boosting, hier bewusst vorsichtig: flache Bäume, viele Spiele pro Blatt, Regularisierung."},
+    "xgboost": {"label": "XGBoost", "modes": ["predict", "strategy"], "trains": True, "needs": "xgboost",
+                "help": "Boosting wie LightGBM, andere Umsetzung — ebenfalls flach und stark regularisiert."},
 }
+
+CALIBRATIONS = {
+    "none": {"label": "keine", "help": "Wahrscheinlichkeiten so, wie das Modell sie ausgibt."},
+    "sigmoid": {"label": "Platt (Sigmoid)", "help": "Glättet die Wahrscheinlichkeiten mit einer S-Kurve — robust, auch bei wenig Daten."},
+    "isotonic": {"label": "Isotonisch", "help": "Freie, monotone Korrektur — genauer, braucht aber über 1000 Trainings-Wetten."},
+}
+
+
+def _available(model: str) -> bool:
+    need = MODELS[model].get("needs")
+    if not need:
+        return True
+    import importlib.util
+    if importlib.util.find_spec(need) is None:
+        return False
+    if need == "xgboost":
+        # ältere XGBoost-Versionen passen nicht zu scikit-learn ≥ 1.6
+        try:
+            from sklearn.base import is_classifier
+            from xgboost import XGBClassifier
+            if not is_classifier(XGBClassifier()):
+                return False
+        except Exception:
+            return False
+    return True
 
 MARKETS = {
     "1x2": {"label": "1X2 (Heim / Remis / Auswärts)", "outcomes": ["Heim", "Remis", "Auswärts"]},
@@ -180,7 +209,38 @@ def _classifier(model: str):
         return make_pipeline(SimpleImputer(strategy="median"),
                              RandomForestClassifier(n_estimators=200, max_depth=8, min_samples_leaf=50,
                                                     n_jobs=1, random_state=1))
+    if model in ("lgbm", "xgboost") and not _available(model):
+        raise ValueError(f"{MODELS[model]['label']} ist auf diesem Rechner nicht installiert.")
+    from sklearn.preprocessing import FunctionTransformer
+
+    # Spaltennamen mit Umlauten/Klammern mögen die Bibliotheken nicht → als reine Zahlenmatrix übergeben
+    as_array = FunctionTransformer(lambda X: np.asarray(X, dtype=float))
+    if model == "lgbm":
+        from lightgbm import LGBMClassifier
+        return make_pipeline(as_array, LGBMClassifier(
+            n_estimators=300, learning_rate=0.03, num_leaves=7, max_depth=3, min_child_samples=80,
+            reg_lambda=5.0, reg_alpha=1.0, subsample=0.8, subsample_freq=1, colsample_bytree=0.8,
+            n_jobs=1, random_state=1, verbose=-1))
+    if model == "xgboost":
+        from xgboost import XGBClassifier
+        return make_pipeline(as_array, XGBClassifier(
+            n_estimators=300, learning_rate=0.03, max_depth=3, min_child_weight=20, reg_lambda=5.0,
+            reg_alpha=1.0, subsample=0.8, colsample_bytree=0.8, n_jobs=1, random_state=1,
+            tree_method="hist", verbosity=0))
     raise ValueError(f"Unbekanntes Modell: {model}")
+
+
+def _fit(model: str, X: pd.DataFrame, y: np.ndarray, calibration: str = "none"):
+    """Modell trainieren, optional kalibrieren — nur mit Trainingsdaten (zeitliche innere Aufteilung)."""
+    if calibration not in ("sigmoid", "isotonic"):
+        return _classifier(model).fit(X, y)
+    from sklearn.calibration import CalibratedClassifierCV
+    from sklearn.model_selection import TimeSeriesSplit
+
+    # Jede Falte: Modell auf älteren Trainingsdaten, Kalibrierung auf den jüngeren danach.
+    # X ist zeitlich sortiert, also schaut keine Falte in die Zukunft — und nie in den Test.
+    return CalibratedClassifierCV(_classifier(model), method=calibration,
+                                  cv=TimeSeriesSplit(n_splits=3), ensemble=True).fit(X, y)
 
 
 class _PoissonGoals:
@@ -335,7 +395,7 @@ def _run_predict(cfg: Dict[str, Any], step: Callable[[str], None]) -> Dict[str, 
         step("Merkmale bewerten")
         importance = _permutation(m.predict_proba, X[te].reset_index(drop=True), y[te], _log_loss(y[te], P))
     else:
-        m = _classifier(model).fit(X[tr], y[tr])
+        m = _fit(model, X[tr], y[tr], cfg.get("calibration", "none"))
         P = m.predict_proba(X[te])
         step("Merkmale bewerten")
         importance = _permutation(m.predict_proba, X[te].reset_index(drop=True), y[te], _log_loss(y[te], P))
@@ -393,18 +453,90 @@ def _run_predict(cfg: Dict[str, Any], step: Callable[[str], None]) -> Dict[str, 
 
 # Was das Modell bei einer Strategie-Wette sehen darf (Closing und xROI wären Blick in die Zukunft,
 # wenn zur Opening gewettet wird; die Spalten odd_* sind immer Closing)
-_STRAT_FEATURES = {
-    "odds": "Quote", "home_quote": "Quote Heim", "draw_quote": "Quote Remis", "away_quote": "Quote Ausw.",
-    "over_25_quote": "Quote Über 2,5", "under_25_quote": "Quote Unter 2,5",
-    "rating_h": "Glicko Heim", "rating_a": "Glicko Ausw.", "rd_h": "RD Heim", "rd_a": "RD Ausw.",
-    "p_home": "Glicko p(Heim)", "p_draw": "Glicko p(Remis)", "p_away": "Glicko p(Ausw.)",
-    "xg_glicko_h": "Glicko-xG Heim", "xg_glicko_a": "Glicko-xG Ausw.",
-    "xg_form2_h": "Form2-xG Heim", "xg_form2_a": "Form2-xG Ausw.",
-    "form2_home_n": "Spiele Heim", "form2_away_n": "Spiele Ausw.",
-    "form2_home_avg_xg": "Heim xG", "form2_home_avg_xga": "Heim xGA",
-    "form2_away_avg_xg": "Ausw. xG", "form2_away_avg_xga": "Ausw. xGA",
-    "form2_home_avg_gf": "Heim Tore", "form2_away_avg_gf": "Ausw. Tore",
+# Feature-Gruppen für den Strategie-Filter. Spalte → Anzeigename.
+STRAT_GROUPS: Dict[str, Dict[str, Any]] = {
+    "odds": {"label": "Quote der Wette", "help": "Die gewettete Quote.",
+             "cols": {"odds": "Quote"}},
+    "side_quotes": {"label": "Quoten Heim / Auswärts", "help": "1X2-Quoten der beiden Teams.",
+                    "cols": {"home_quote": "Quote Heim", "away_quote": "Quote Ausw."}},
+    "draw": {"label": "Remis (Quote, Glicko p)", "help": "Rauschen bei reinen Heim-/Auswärts-Strategien.",
+             "cols": {"draw_quote": "Quote Remis", "p_draw": "Glicko p(Remis)"}},
+    "totals": {"label": "Tore-Quoten (Über/Unter 2,5)", "help": "Rauschen bei Heim-/Auswärts-Strategien.",
+               "cols": {"over_25_quote": "Quote Über 2,5", "under_25_quote": "Quote Unter 2,5"}},
+    "glicko": {"label": "Glicko (Ratings, p, xG)", "help": "Ratings, Unsicherheit, Sieg-Wahrscheinlichkeiten, Glicko-xG.",
+               "cols": {"rating_h": "Glicko Heim", "rating_a": "Glicko Ausw.", "rd_h": "RD Heim", "rd_a": "RD Ausw.",
+                        "p_home": "Glicko p(Heim)", "p_away": "Glicko p(Ausw.)",
+                        "xg_glicko_h": "Glicko-xG Heim", "xg_glicko_a": "Glicko-xG Ausw."}},
+    "form": {"label": "Form2 (xG, xGA, Tore)", "help": "Saison-Schnitte der beiden Teams.",
+             "cols": {"xg_form2_h": "Form2-xG Heim", "xg_form2_a": "Form2-xG Ausw.",
+                      "form2_home_n": "Spiele Heim", "form2_away_n": "Spiele Ausw.",
+                      "form2_home_avg_xg": "Heim xG", "form2_home_avg_xga": "Heim xGA",
+                      "form2_away_avg_xg": "Ausw. xG", "form2_away_avg_xga": "Ausw. xGA",
+                      "form2_home_avg_gf": "Heim Tore", "form2_away_avg_gf": "Ausw. Tore"}},
+    "diffs": {"label": "Differenzen zugunsten der Wettseite",
+              "help": "Power Diff, pred. xG Diff, xG Form2 Diff, Glicko Diff — bei Auswärts-Wetten umgedreht, "
+                      "bei Remis als Abstand, bei Über/Unter als Summen.",
+              "cols": {}},  # berechnet in _strat_features
 }
+_SIDE_MARKETS = {"Home", "Away"}
+_TOTAL_MARKETS = {"Over 2.5", "Under 2.5"}
+
+
+def default_strat_groups(markets: List[str]) -> List[str]:
+    """Sinnvolle Gruppen je nach Markt der Strategie: Remis/Tore nur, wo darauf gewettet wird."""
+    ms = set(markets)
+    groups = ["odds", "side_quotes", "glicko", "form", "diffs"]
+    if "Draw" in ms:
+        groups.append("draw")
+    if ms & _TOTAL_MARKETS:
+        groups.append("totals")
+    return groups
+
+
+def _num(df: pd.DataFrame, c: str) -> pd.Series:
+    return pd.to_numeric(df[c], errors="coerce") if c in df else pd.Series(np.nan, index=df.index)
+
+
+def _ratio(a: pd.Series, b: pd.Series) -> pd.Series:
+    return a / b.where(b > 0)
+
+
+def _strat_features(df: pd.DataFrame, groups: List[str]) -> pd.DataFrame:
+    X = pd.DataFrame(index=df.index)
+    for g in groups:
+        for c, label in STRAT_GROUPS[g]["cols"].items():
+            X[label] = _num(df, c)
+    if "diffs" in groups:
+        n = lambda c: _num(df, c)
+        raw = {
+            "Power Diff (Heim/Ausw.-Ort)": _ratio(n("hometeam_home_xg"), n("hometeam_home_xga"))
+                                          - _ratio(n("awayteam_away_xg"), n("awayteam_away_xga")),
+            "Power Diff": _ratio(n("form2_home_avg_xg"), n("form2_home_avg_xga"))
+                          - _ratio(n("form2_away_avg_xg"), n("form2_away_avg_xga")),
+            "pred. xG Diff": n("hometeam_pred_xg") - n("awayteam_pred_xg"),
+            "xG Form2 Diff": n("xg_form2_h") - n("xg_form2_a"),
+            "Glicko Diff": n("rating_h") - n("rating_a"),
+            "Glicko-xG Diff": n("xg_glicko_h") - n("xg_glicko_a"),
+        }
+        mk = df.market.astype(str) if "market" in df else pd.Series("", index=df.index)
+        # Heim: +, Auswärts: −, Remis: −|Abstand| (ausgeglichen = gut); Über/Unter: keine Richtung
+        sign = np.where(mk == "Away", -1.0, 1.0)
+        draw = (mk == "Draw").to_numpy()
+        side_or_draw = mk.isin(_SIDE_MARKETS | {"Draw"}).to_numpy()
+        for label, v in raw.items():
+            v = v.to_numpy(float)
+            X[f"{label} (Wettseite)"] = np.where(side_or_draw, np.where(draw, -np.abs(v), sign * v), np.nan)
+        if mk.isin(_TOTAL_MARKETS).any():
+            tsign = np.where(mk == "Under 2.5", -1.0, 1.0)
+            sums = {
+                "Tempo Summe": n("form2_home_avg_xg") + n("form2_home_avg_xga") + n("form2_away_avg_xg") + n("form2_away_avg_xga"),
+                "pred. xG Summe": n("hometeam_pred_xg") + n("awayteam_pred_xg"),
+                "xG Form2 Summe": n("xg_form2_h") + n("xg_form2_a"),
+            }
+            for label, v in sums.items():
+                # bei Unter-Wetten umgedreht: grösser = spricht für die Wette
+                X[f"{label} (Wettseite)"] = np.where(mk.isin(_TOTAL_MARKETS), tsign * v.to_numpy(float), np.nan)
+    return X
 
 
 def _run_strategy(cfg: Dict[str, Any], step: Callable[[str], None]) -> Dict[str, Any]:
@@ -428,14 +560,16 @@ def _run_strategy(cfg: Dict[str, Any], step: Callable[[str], None]) -> Dict[str,
         raise ValueError("Strategie liefert keine Wetten.")
     df["date"] = pd.to_datetime(df["date"], utc=True, errors="coerce")
     df = df.dropna(subset=["date", "odds", "profit"]).sort_values("date").reset_index(drop=True)
-    for c in _STRAT_FEATURES:
-        if c not in df:
-            df[c] = np.nan
-    X = df[list(_STRAT_FEATURES)].apply(pd.to_numeric, errors="coerce").rename(columns=_STRAT_FEATURES)
-    for mk in sorted(df.market.dropna().unique()):
-        if df.market.nunique() > 1:
+    markets = sorted(df.market.dropna().astype(str).unique())
+    groups = [g for g in cfg.get("features") or [] if g in STRAT_GROUPS] or default_strat_groups(markets)
+    X = _strat_features(df, groups)
+    for mk in markets:
+        if len(markets) > 1:
             X[f"Markt {mk}"] = (df.market == mk).astype(float)
-    X = X.loc[:, X.notna().mean() > 0.3]
+    dropped = [c for c in X.columns if X[c].notna().mean() <= 0.3]
+    X = X.drop(columns=dropped)
+    if X.shape[1] == 0:
+        raise ValueError("Keine verwendbaren Merkmale — andere Gruppen wählen.")
     y = (df.profit.astype(float) > 0).astype(int).to_numpy()
     if cfg.get("split") == "auto":
         # ältere 60 % lernen, neuere 40 % testen — Stichtag auf einen Tageswechsel legen
@@ -449,9 +583,11 @@ def _run_strategy(cfg: Dict[str, Any], step: Callable[[str], None]) -> Dict[str,
     if len(set(y[tr])) < 2:
         raise ValueError("Im Training gibt es nur Treffer oder nur Nieten — nichts zu lernen.")
 
-    step("Modell trainieren")
-    m = _classifier(model).fit(X[tr], y[tr])
-    p = m.predict_proba(X[te])[:, 1]
+    calibration = cfg.get("calibration", "none")
+    step("Modell trainieren" + (" und kalibrieren" if calibration != "none" else ""))
+    m = _fit(model, X[tr], y[tr], calibration)
+    # nie 0 % oder 100 % (isotonisch tut das bei wenigen Wetten) — sonst explodiert der Log-Loss
+    p = np.clip(m.predict_proba(X[te])[:, 1], 0.01, 0.99)
     odds = df.odds.astype(float).to_numpy()[te]
     profit = df.profit.astype(float).to_numpy()[te]
     o_open = pd.to_numeric(df.odds_opening, errors="coerce").to_numpy()[te]
@@ -462,6 +598,9 @@ def _run_strategy(cfg: Dict[str, Any], step: Callable[[str], None]) -> Dict[str,
         out = {"label": label, **_roi_block(profit[mask])}
         if mask.any():
             out["hit_pct"] = round(float((profit[mask] > 0).mean() * 100), 1)
+            # Was das Modell erwartet hat — liegt das nah am echten ROI, stimmen die Wahrscheinlichkeiten
+            out["ev_pct"] = round(float(ev[mask].mean() * 100), 2)
+            out["p_pct"] = round(float(p[mask].mean() * 100), 1)
             out["avg_odds"] = round(float(odds[mask].mean()), 2)
             ok = mask & np.isfinite(o_open) & np.isfinite(o_close) & (o_close > 1)
             if ok.any():
@@ -491,13 +630,22 @@ def _run_strategy(cfg: Dict[str, Any], step: Callable[[str], None]) -> Dict[str,
         "n_train": int(tr.sum()), "n_test": int(te.sum()), "split_used": str(split.date()),
         "train_from": str(df.date[tr].min().date()), "test_to": str(df.date[te].max().date()),
         "train_roi_pct": round(float(df.profit.astype(float)[tr].mean() * 100), 2),
-        "scores": {"model": {"log_loss": round(_log_loss(y[te], P2), 4)},
-                   "quote": {"log_loss": round(_log_loss(y[te], Pi), 4)}},
+        "scores": {"model": {"log_loss": round(_log_loss(y[te], P2), 4), "brier": round(_brier(y[te], P2), 4)},
+                   "quote": {"log_loss": round(_log_loss(y[te], Pi), 4), "brier": round(_brier(y[te], Pi), 4)}},
         "selections": selections,
         "filter_helps": better if te.sum() >= 200 else None,  # darunter: kein Urteil
         "importance": importance[:15],
+        # Treffer-Wahrscheinlichkeit: vorhergesagt gegen tatsächlich (Klasse „Treffer“ = Spalte 0 nach Umdrehen)
+        "calibration": {"outcome": "Treffer", "bins": _calibration(1 - y[te], P2[:, ::-1], bins=8)},
+        "features_used": list(X.columns), "feature_groups": groups, "features_dropped": dropped,
+        "calibration_method": calibration,
         "notes": ["CLV hier: Opening- gegen Closing-Quote derselben Wette (Marge nicht herausgerechnet) — Näherung."]
-                 + (["Wenige Wetten: Unterschiede zwischen den Gruppen sind meist Zufall."] if te.sum() < 200 else []),
+                 + (["Wenige Wetten: Unterschiede zwischen den Gruppen sind meist Zufall."] if te.sum() < 200 else [])
+                 + ([f"Das Modell hat nichts gelernt: fast jede Wette bekommt {p.mean() * 100:.0f} %. Die Aufteilung "
+                     "in bessere/schlechtere Hälfte sortiert dann nur nach der Quote — kein echter Filter."]
+                    if float(np.std(p)) < 0.01 else [])
+                 + (["Isotonische Kalibrierung mit weniger als 1000 Trainings-Wetten ist meist zu unruhig — "
+                     "Platt ist hier sicherer."] if calibration == "isotonic" and tr.sum() < 1000 else []),
     }
 
 
@@ -507,9 +655,11 @@ def catalog() -> Dict[str, Any]:
     from services import strategy_presets_service as presets_svc
 
     return {
-        "models": [{"id": k, **v} for k, v in MODELS.items()],
+        "models": [{"id": k, **v, "available": _available(k)} for k, v in MODELS.items()],
         "markets": [{"id": k, "label": v["label"]} for k, v in MARKETS.items()],
         "feature_groups": [{"id": k, **v} for k, v in FEATURE_GROUPS.items()],
+        "strategy_feature_groups": [{"id": k, "label": v["label"], "help": v["help"]} for k, v in STRAT_GROUPS.items()],
+        "calibrations": [{"id": k, **v} for k, v in CALIBRATIONS.items()],
         "presets": [{"id": p.get("id"), "name": p.get("name")} for p in presets_svc.load_presets()],
         "default_split": "2026-09-01",
     }
@@ -559,7 +709,10 @@ def _validate(cfg: Dict[str, Any]) -> Dict[str, Any]:
             split = str(pd.Timestamp(cfg.get("split") or "2026-09-01").date())
         except Exception:
             raise ValueError("Stichtag ungültig.")
-    out = {"mode": mode, "model": model, "split": split}
+    if not _available(model):
+        raise ValueError(f"{MODELS[model]['label']} ist auf diesem Rechner nicht installiert.")
+    out = {"mode": mode, "model": model, "split": split,
+           "calibration": cfg.get("calibration") if cfg.get("calibration") in CALIBRATIONS else "none"}
     if mode == "predict":
         out.update({
             "market": cfg.get("market") if cfg.get("market") in MARKETS else "1x2",
@@ -569,6 +722,8 @@ def _validate(cfg: Dict[str, Any]) -> Dict[str, Any]:
         })
     else:
         out["preset_id"] = cfg.get("preset_id")
+        # leer = automatisch passend zum Markt der Strategie
+        out["features"] = [g for g in cfg.get("features") or [] if g in STRAT_GROUPS]
     return out
 
 

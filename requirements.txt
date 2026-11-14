@@ -8,3 +8,4 @@ websocket-client
 tzdata
 PySocks
 scikit-learn
+lightgbm

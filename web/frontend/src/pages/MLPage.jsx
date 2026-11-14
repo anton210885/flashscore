@@ -136,31 +136,39 @@ function PredictDetail({ res, cfg, catalog }) {
         </table>
       </div>
 
-      {res.calibration?.bins?.length ? (
-        <>
-          <h3>Kalibrierung: „{res.calibration.outcome}“ vorhergesagt vs. eingetreten</h3>
-          <div className="ml-calib">
-            {res.calibration.bins.map((b, i) => (
-              <div key={i} className="ml-calib-col" title={`n=${b.n}`}>
-                <div className="ml-calib-bars">
-                  <span className="ml-calib-p" style={{ height: `${b.predicted * 100}%` }} />
-                  <span className="ml-calib-a" style={{ height: `${b.actual * 100}%` }} />
-                </div>
-                <span className="muted">{num(b.predicted * 100, 0)}%</span>
-              </div>
-            ))}
-          </div>
-          <p className="muted ml-legend">
-            <span className="ml-calib-p ml-dot" /> vorhergesagt <span className="ml-calib-a ml-dot" /> tatsächlich —
-            gleich hoch = gut kalibriert
-          </p>
-        </>
-      ) : null}
+      <Calibration cal={res.calibration} />
     </>
   )
 }
 
-function StrategyDetail({ res }) {
+function Calibration({ cal }) {
+  if (!cal?.bins?.length) return null
+  return (
+    <>
+      <h3>Kalibrierung: „{cal.outcome}“ vorhergesagt vs. eingetreten</h3>
+      <div className="ml-calib">
+        {cal.bins.map((b, i) => (
+          <div key={i} className="ml-calib-col" title={`n=${b.n}`}>
+            <div className="ml-calib-bars">
+              <span className="ml-calib-p" style={{ height: `${b.predicted * 100}%` }} />
+              <span className="ml-calib-a" style={{ height: `${b.actual * 100}%` }} />
+            </div>
+            <span className="muted">{num(b.predicted * 100, 0)}%</span>
+          </div>
+        ))}
+      </div>
+      <p className="muted ml-legend">
+        <span className="ml-calib-p ml-dot" /> vorhergesagt <span className="ml-calib-a ml-dot" /> tatsächlich — gleich
+        hoch = gut kalibriert
+      </p>
+    </>
+  )
+}
+
+function StrategyDetail({ res, catalog }) {
+  const groupLabel = (id) => catalog?.strategy_feature_groups?.find((g) => g.id === id)?.label || id
+  const calLabel = catalog?.calibrations?.find((c) => c.id === res.calibration_method)?.label
+  const s = res.scores || {}
   return (
     <>
       <h3>
@@ -171,6 +179,19 @@ function StrategyDetail({ res }) {
         Das Modell bewertet jede Testwette. Hilft der Filter, ist die bessere Hälfte deutlich besser als alle Wetten
         und die schlechtere Hälfte deutlich schlechter. ROI im Training: {signed(res.train_roi_pct, 1)}.
       </p>
+      {res.feature_groups?.length ? (
+        <p className="muted">
+          Merkmale: {res.feature_groups.map(groupLabel).join(' · ')} ({res.features_used?.length} Spalten)
+          {res.features_dropped?.length ? ` · zu lückenhaft, weggelassen: ${res.features_dropped.join(', ')}` : ''}
+          {calLabel ? ` · Kalibrierung: ${calLabel}` : ''}
+        </p>
+      ) : null}
+      {s.model?.brier != null ? (
+        <p className="muted">
+          Treffer vorhersagen — Log-Loss {num(s.model.log_loss, 4)} / Brier {num(s.model.brier, 4)} (Modell) gegen{' '}
+          {num(s.quote?.log_loss, 4)} / {num(s.quote?.brier, 4)} (nur aus der Quote, mit Marge). Kleiner ist besser.
+        </p>
+      ) : null}
       <div className="table-wrap">
         <table className="data-table ml-small">
           <thead>
@@ -178,6 +199,8 @@ function StrategyDetail({ res }) {
               <th>Auswahl</th>
               <th className="num">Wetten</th>
               <th className="num">Treffer</th>
+              <th className="num" title="Durchschnittliche Treffer-Wahrscheinlichkeit laut Modell">Treffer erwartet</th>
+              <th className="num" title="Erwartungswert laut Modell — nah am ROI = gut kalibriert">EV erwartet</th>
               <th className="num">Ø Quote</th>
               <th className="num">CLV (Näherung)</th>
               <th className="num">ROI</th>
@@ -191,6 +214,8 @@ function StrategyDetail({ res }) {
                 <td>{s.label}</td>
                 <td className="num">{s.n}</td>
                 <td className="num">{s.hit_pct != null ? `${num(s.hit_pct, 0)} %` : '—'}</td>
+                <td className="num muted">{s.p_pct != null ? `${num(s.p_pct, 0)} %` : '—'}</td>
+                <td className={`num muted ${cls(s.ev_pct)}`}>{signed(s.ev_pct, 1)}</td>
                 <td className="num">{num(s.avg_odds)}</td>
                 <td className={`num ${cls(s.clv_pct)}`}>{signed(s.clv_pct)}</td>
                 <td className={`num ${cls(s.roi_pct)}`}>{signed(s.roi_pct, 1)}</td>
@@ -201,6 +226,7 @@ function StrategyDetail({ res }) {
           </tbody>
         </table>
       </div>
+      <Calibration cal={res.calibration} />
     </>
   )
 }
@@ -222,6 +248,9 @@ export default function MLPage() {
     split: '2026-09-01',
     preset_id: '',
     autoSplit: true,
+    calibration: 'none',
+    stratAuto: true,
+    stratFeatures: ['odds', 'side_quotes', 'glicko', 'form', 'diffs'],
   })
 
   const load = useCallback(() => {
@@ -290,6 +319,11 @@ export default function MLPage() {
       ...x,
       features: x.features.includes(id) ? x.features.filter((f) => f !== id) : [...x.features, id],
     }))
+  const toggleStratFeature = (id) =>
+    setCfg((x) => ({
+      ...x,
+      stratFeatures: x.stratFeatures.includes(id) ? x.stratFeatures.filter((f) => f !== id) : [...x.stratFeatures, id],
+    }))
 
   const usesGlicko = cfg.mode === 'predict' && (cfg.model === 'glicko' || cfg.features.includes('glicko'))
   const needsFeatures = cfg.mode === 'predict' && model?.trains
@@ -305,8 +339,16 @@ export default function MLPage() {
             honest_glicko: cfg.honest_glicko,
             scope_only: cfg.scope_only,
             split: cfg.split,
+            calibration: cfg.calibration,
           }
-        : { mode: 'strategy', model: cfg.model, preset_id: cfg.preset_id, split: cfg.autoSplit ? 'auto' : cfg.split }
+        : {
+            mode: 'strategy',
+            model: cfg.model,
+            preset_id: cfg.preset_id,
+            split: cfg.autoSplit ? 'auto' : cfg.split,
+            calibration: cfg.calibration,
+            features: cfg.stratAuto ? [] : cfg.stratFeatures,
+          }
     api
       .mlStart(body)
       .then((r) => {
@@ -383,13 +425,26 @@ export default function MLPage() {
             Modell
             <select value={cfg.model} onChange={(e) => set('model', e.target.value)}>
               {models.map((m) => (
-                <option key={m.id} value={m.id}>
+                <option key={m.id} value={m.id} disabled={m.available === false}>
                   {m.label}
+                  {m.available === false ? ' (nicht installiert)' : ''}
                 </option>
               ))}
             </select>
           </label>
           {model ? <p className="muted ml-help">{model.help}</p> : null}
+          {model?.trains && model.id !== 'poisson' ? (
+            <label className="strat-field">
+              Kalibrierung der Wahrscheinlichkeiten
+              <select value={cfg.calibration} onChange={(e) => set('calibration', e.target.value)}>
+                {(catalog?.calibrations || []).map((c) => (
+                  <option key={c.id} value={c.id} title={c.help}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           {cfg.mode === 'predict' ? (
             <>
@@ -453,6 +508,29 @@ export default function MLPage() {
                   ))}
                 </select>
               </label>
+              <div className="strat-field">
+                Merkmale
+                <div className="ml-checks">
+                  <label title="Heim/Auswärts ohne Remis- und Tore-Quoten; Remis bzw. Über/Unter nehmen ihre Quoten dazu">
+                    <input type="checkbox" checked={cfg.stratAuto} onChange={(e) => set('stratAuto', e.target.checked)} />
+                    Automatisch passend zum Markt der Strategie
+                  </label>
+                </div>
+                {!cfg.stratAuto ? (
+                  <div className="ml-checks">
+                    {(catalog?.strategy_feature_groups || []).map((g) => (
+                      <label key={g.id} title={g.help}>
+                        <input
+                          type="checkbox"
+                          checked={cfg.stratFeatures.includes(g.id)}
+                          onChange={() => toggleStratFeature(g.id)}
+                        />
+                        {g.label}
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               <div className="ml-checks">
                 <label>
                   <input type="checkbox" checked={cfg.autoSplit} onChange={(e) => set('autoSplit', e.target.checked)} />
@@ -530,7 +608,12 @@ export default function MLPage() {
                     >
                       <td className="muted">{when(r.created_at)}</td>
                       <td>{MODE_LABEL[c.mode]}</td>
-                      <td>{modelLabel(c.model)}</td>
+                      <td>
+                        {modelLabel(c.model)}
+                        {c.calibration && c.calibration !== 'none' ? (
+                          <span className="muted"> · {c.calibration === 'sigmoid' ? 'Platt' : 'isoton.'}</span>
+                        ) : null}
+                      </td>
                       <td>
                         {strat ? r.strategy || '—' : marketLabel(c.market)}
                         {!strat && c.features?.length ? <span className="muted"> · {featLabel(c.features)}</span> : null}
@@ -595,7 +678,7 @@ export default function MLPage() {
           ) : null}
           {detail.result ? (
             detail.config?.mode === 'strategy' ? (
-              <StrategyDetail res={detail.result} />
+              <StrategyDetail res={detail.result} catalog={catalog} />
             ) : (
               <PredictDetail res={detail.result} cfg={detail.config} catalog={catalog} />
             )
